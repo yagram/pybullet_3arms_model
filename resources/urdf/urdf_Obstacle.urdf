@@ -1,0 +1,66 @@
+<?xml version= "1.0" ?>
+<robot name ="new Obstacle">
+
+<link name = "isocenter">
+	<inertial>
+      <origin rpy="0 0 0" xyz="0 0 0"/>
+      <mass value="0.0"/>
+      <inertia ixx="1" ixy="0" ixz="0" iyy="1" iyz="0" izz="1"/>
+    </inertial>
+    <visual>
+      <origin rpy="0 0 0" xyz="0 0 0"/>
+      <geometry>
+		<box size="0.001 0.001 0.001"/>
+	</geometry>
+		<material name="red">
+        <color rgba="1 0 0 1"/>
+      </material>
+    </visual>
+    <!--<collision>
+      <origin rpy="0 0 0" xyz="0 0 0"/>
+      <geometry>
+         <box size="0.001 0.001 0.001"/>
+      </geometry>
+    </collision>-->
+  </link>
+
+
+  <joint name="joint_iso_to_obstacle" type="fixed">
+    <origin rpy="0 0 0" xyz="100.0 -300.0 10.0"/>
+    <parent link="isocenter"/>
+    <child link ="Obstacle"/>
+  </joint>
+
+
+
+  <link name = "Obstacle">
+    <contact>
+      <lateral_friction value="1.0"/>
+      <rolling_friction value = "101"/>
+      <contact_cfm value="0.0"/>
+      <contact_erp value="1.0"/>
+    </contact>
+    <inertial>
+      <origin rpy="0 0 0" xyz="0.000000 0.0 0.000000"/>
+      <mass value="200"/>
+      <inertia ixx = "1" ixy = "0" ixz = "0" iyy = "1" iyz = "0" izz = "1"/>
+    </inertial>
+    <visual>
+      <origin rpy="0 0 0" xyz="0.000000 0.0 0.000000"/>
+      <geometry>
+        <box size ="20.0 20.0 200.0"/>
+      </geometry>
+      <material name="red">
+        <color rgba="1 0 0 1"/>
+      </material>
+    </visual>
+    <collision>
+      <origin rpy="0 0 0" xyz="0.000000 0.0 0.000000"/>
+      <geometry>
+        <box size ="20.0 20.0 200.0"/>
+      </geometry>
+    </collision>
+  </link>
+
+  
+</robot>

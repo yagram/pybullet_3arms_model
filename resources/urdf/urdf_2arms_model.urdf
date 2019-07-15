@@ -1,0 +1,176 @@
+<?xml version= "1.0" ?>
+<robot name ="new_2arms_model">
+
+<link name = "isocenter">
+	<inertial>
+      <origin rpy="0 0 0" xyz="0 0 0"/>
+      <mass value="0.0"/>
+      <inertia ixx="1" ixy="0" ixz="0" iyy="1" iyz="0" izz="1"/>
+    </inertial>
+    <visual>
+      <origin rpy="0 0 0" xyz="0 0 0"/>
+      <geometry>
+		<box size="0.001 0.001 0.001"/>
+	</geometry>
+		<material name="red">
+        <color rgba="1 0 0 1"/>
+      </material>
+    </visual>
+    <!--<collision>
+      <origin rpy="0 0 0" xyz="0 0 0"/>
+      <geometry>
+         <box size="0.001 0.001 0.001"/>
+      </geometry>
+    </collision>-->
+  </link>
+
+  <joint name="base" type="fixed">
+    <parent link="isocenter"/>
+    <child link="Base"/>
+	<origin xyz="0.000000 -195.000000 -110.300003" rpy="0 0 0" />
+	</joint>
+
+<link name = "Base">
+	<contact>
+		<lateral_friction value="1.0"/>
+		<rolling_friction value = "100"/>
+		<contact_cfm value="0.0"/>
+		<contact_erp value="1.0"/>
+	</contact>
+	<inertial>
+		<origin rpy="0 0 0" xyz="0.000000 0 0"/>
+		<mass value="0.0"/>
+  		<inertia ixx = "1" ixy = "0" ixz = "0" iyy = "1" iyz = "0" izz = "1"/>
+	</inertial>
+	<visual>
+		<origin rpy="0 0 0" xyz="0.000000 0 0"/>
+		<geometry>
+			<cylinder length="1" radius="5"/>
+		</geometry>
+		<material name="blue">
+			<color rgba="0 0 1 1"/>
+		</material>
+	</visual>
+</link>
+
+
+<joint name="joint_Base_to_A1" type="revolute">
+	<axis xyz="0 0 1"/>
+	<limit effort="100000" lower="-3.14" upper="3.14" velocity="0.5"/>
+  <dynamics damping="10000000" friction="10000000"/>
+	<origin rpy = "0 0 0" xyz = "0.000000 0 0"/>
+	<parent link="Base"/>
+	<child link ="A1"/>
+</joint>
+
+
+<link name = "A1">
+	<contact>
+		<lateral_friction value="1.0"/>
+		<rolling_friction value = "101"/>
+		<contact_cfm value="0.0"/>
+		<contact_erp value="1.0"/>
+	</contact>
+	<inertial>
+		<origin rpy="0 0 0" xyz="0.000000 -55.000000 0.000000"/>
+		<mass value="1.0"/>
+  		<inertia ixx = "1" ixy = "0" ixz = "0" iyy = "1" iyz = "0" izz = "1"/>
+	</inertial>
+	<visual>
+		<origin rpy="0 0 0" xyz="0.000000 -55.000000 0.000000"/>
+		<geometry>
+			<mesh filename="leoni_0.obj" scale="1 1 1"/>
+		</geometry>
+		<material name="white">
+			<color rgba="1 1 1 1"/>
+		</material>
+	</visual>
+	<collision>
+		<origin rpy="0 0 0" xyz="0.000000 -55.000000 0.000000"/>
+		<geometry>
+			<mesh filename="leoni_0.obj" scale="1 1 1"/>
+		</geometry>
+	</collision>
+</link>
+
+
+<joint name="joint_A1_to_A2" type="revolute">
+	<axis xyz="0 0 1"/>
+	<limit effort="100000" lower="-3.14" upper="3.14" velocity="0.5"/>
+  <dynamics damping="10000000" friction="10000000"/>
+	<origin rpy = "0 0 0" xyz = "0.000000 -119.500000 38.299999"/>
+	<parent link="A1"/>
+	<child link ="A2"/>
+</joint>
+
+
+<link name = "A2">
+	<contact>
+		<lateral_friction value="1.0"/>
+		<rolling_friction value = "102"/>
+		<contact_cfm value="0.0"/>
+		<contact_erp value="1.0"/>
+	</contact>
+	<inertial>
+		<origin rpy="0 0 0" xyz="0.000000 12.000000 0.000000"/>
+		<mass value="1.0"/>
+		<inertia ixx = "1" ixy = "0" ixz = "0" iyy = "1" iyz = "0" izz = "1"/>
+	</inertial>
+	<visual>
+		<origin rpy="0 0 0" xyz="0.000000 12.000000 0.000000"/>
+		<geometry>
+			<box size ="58.000000 82.000000 38.000000"/>
+		</geometry>
+		<material name="black">
+			<color rgba="0 0 0 1"/>
+		</material>
+	</visual>
+	<collision>
+		<origin rpy="0 0 0" xyz="0.000000 12.000000 0.000000"/>
+		<geometry>
+			<box size ="58.000000 82.000000 38.000000"/>
+		</geometry>
+	</collision>
+</link>
+
+
+
+  <joint name="joint_A2_to_A3" type="revolute">
+    <axis xyz="1 0 0"/>
+    <limit effort="100000" lower="-3.14" upper="3.14" velocity="0.5"/>
+    <dynamics damping="10000000" friction="10000000"/>
+    <origin rpy = "0 0 0" xyz = "0.000000 36.000000 0.000000"/>
+    <parent link="A2"/>
+    <child link ="A3"/>
+  </joint>
+
+  <link name = "A3">
+    <contact>
+      <lateral_friction value="1.0"/>
+      <rolling_friction value = "103"/>
+      <contact_cfm value="0.0"/>
+      <contact_erp value="1.0"/>
+    </contact>
+    <inertial>
+      <origin rpy="0 0 0" xyz="0.000000 31.129999 0.000000"/>
+      <mass value="1.0"/>
+      <inertia ixx = "1" ixy = "0" ixz = "0" iyy = "1" iyz = "0" izz = "1"/>
+    </inertial>
+    <visual>
+      <origin rpy="0 0 0" xyz="0.000000 31.129999 0.000000"/>
+      <geometry>
+        <mesh filename="leoni_2.obj" scale="1 1 1"/>
+      </geometry>
+      <material name="white">
+        <color rgba="1 1 1 1"/>
+      </material>
+    </visual>
+    <collision>
+      <origin rpy="0 0 0" xyz="0.000000 31.129999 0.000000"/>
+      <geometry>
+        <mesh filename="leoni_2.obj" scale="1 1 1"/>
+      </geometry>
+    </collision>
+  </link>
+
+</robot>
