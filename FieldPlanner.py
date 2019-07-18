@@ -34,10 +34,10 @@ class FieldPlanner(threading.Thread):
         self.collisionThread = collisionThread
         self.movingJoints = self.get_moving_joints(self.world.ppsId)
         self.dofLeoni = self.get_dof(self.world.ppsId)
-        self.eta=1000000
-        self.zeta=10
-        self.rho0=100
-        self.d=10
+        self.eta=10000000
+        self.zeta=[10,10,150]
+        self.rho0=150
+        self.d=100
         self.alpha=0.001
         self.posBlocage=0
         self.tour=0
@@ -61,25 +61,30 @@ class FieldPlanner(threading.Thread):
         self.arrayAttForces: List[ndarray] = []
         self.jointAxis=[[0 for i in range(3)] for i in range(3)]
         self.jointTorques= np.zeros(3)
-        self.workbook = xlsxwriter.Workbook('Data_C_Space.xlsx')
+        self.workbook = xlsxwriter.Workbook('trajectory_Obs.xlsx')
         self.worksheet = self.workbook.add_worksheet()
         """Ca c'était pour l'ancien modèle"""
         """self.qFinal: List[ndarray] = [np.asarray([-42.134,-230.351,-110.3]),np.asarray([-91.93,-272.13,-74.3])
             ,np.asarray([-119.87,-212.19,-47.3])] #Pour le goal (40,75,0)"""
         self.qFinal: List[ndarray] = [np.asarray([0.865, -249.99, -110.3]), np.asarray([1.8875, -314.985, -74.3])
-            , np.asarray([54.087, -355.585, -47.3])]  # Pour le goal (90.947,-128.842,0)
+            , np.asarray([54.876, -355.199, -47.3])]  # Pour le goal (90.947,-128.842,0)
         return
 
     def run(self):
         # Le but de ce thread va être de calculer la séquence de position que doit effectuer nos objets
         time.sleep(1)  # On attends une petite seconde le temps que l'autre thread commence à run
         #self.get_final_state()
+        row=0
+        self.construct_C_space()
         while p.isConnected():
-            #self.construct_C_space()
+            """#self.construct_C_space()
             self.update_arrays_att()
             #self.print_array_att_leoni()
             self.update_arrays_rep()
-            #self.print_array_rep_leoni()
+            self.get_att_fields()
+            self.get_rep_fields()
+            self.write_joint_pos(row)
+            self.print_array_rep_leoni()
             self.update_jacobians()
             #self.print_array_jac_att()
             #self.print_array_jac_rep()
@@ -88,14 +93,16 @@ class FieldPlanner(threading.Thread):
             #self.print_rep_forces()
             #self.print_att_forces()
             self.proj_world_forces()
-            self.step_forward()
+            #self.step_forward()
             #self.print_joint_torques()
             #self.print_joint_torques(jointTorques)
             #self.print_joint_pos_deg()
             self.reinit_arrays_rep() #Réinitialisation de la distance
             self.clear_arrays_forces()
+            row +=1
             #self.print_position_all_link(self.world.ppsId)
-        print("finito")
+        print("finito")"""
+
         return
 
     def update_arrays_att(self):
@@ -232,9 +239,9 @@ class FieldPlanner(threading.Thread):
             vec = self.arrayAttLeoni[i]-self.qFinal[i]
             dist = np.linalg.norm(vec, 2)
             if dist <= self.d:
-                self.arrayAttForces.append(-self.zeta*vec)
+                self.arrayAttForces.append(-self.zeta[i]*vec)
             else:
-                self.arrayAttForces.append(-self.d*self.zeta*vec/dist)
+                self.arrayAttForces.append(-self.d*self.zeta[i]*vec/dist)
         return
 
     def proj_world_forces(self):
@@ -254,7 +261,8 @@ class FieldPlanner(threading.Thread):
         normTorque = np.linalg.norm(self.jointTorques, 2)
         for index in range(0,self.dofLeoni):
             nextPos= self.jointPos[index] + self.alpha*self.jointTorques[index]/normTorque
-            p.setJointMotorControl2(self.world.ppsId, index+1, p.POSITION_CONTROL, targetPosition=nextPos)
+            #p.setJointMotorControl2(self.world.ppsId, index+1, p.POSITION_CONTROL, targetPosition=nextPos)
+            p.resetJointState(self.world.ppsId, index+1, targetValue=nextPos)
         self.update_joint_pos(self.world.ppsId)
         #print("This is the vector of torques: " + str(jointTorques))
         #logging.info("Next Position in degrees:" + str([elem*180/3.1415 for elem in q]))
@@ -366,16 +374,17 @@ class FieldPlanner(threading.Thread):
             vec = self.arrayAttLeoni[i] - self.qFinal[i]
             dist = np.linalg.norm(vec, 2)
             if dist <= self.d:
-                fields.append(0.5 * self.zeta * math.pow(dist, 2))
+                fields.append(0.5 * self.zeta[i] * math.pow(dist, 2))
             else:
-                fields.append(self.d * self.zeta * dist - 0.5 * self.zeta * math.pow(self.d, 2))
+                fields.append(self.d * self.zeta[i] * dist - 0.5 * self.zeta[i] * math.pow(self.d, 2))
         self.arrayAttFields.append(np.asarray(fields))
         return
 
     def go_to_next(self):
         for i in range(0, self.dofLeoni - 1):
             #print("This is my vectorPos:" + str(self.vectorPos[-1][i]*180/3.1415))
-            p.setJointMotorControl2(self.world.ppsId, i + 1, p.POSITION_CONTROL, targetPosition=self.vectorPos[-1][i])
+            #p.setJointMotorControl2(self.world.ppsId, i + 1, p.POSITION_CONTROL, targetPosition=self.vectorPos[-1][i])
+            p.resetJointState(self.world.ppsId, i + 1, targetValue=self.vectorPos[-1][i])
             time.sleep(0.002)
             if self.collision:
                 time.sleep(0.01)
@@ -398,18 +407,18 @@ class FieldPlanner(threading.Thread):
             self.vectorPos.append(newPos)
             self.tour=0
         elif np.linalg.norm(self.vectorPos[-1][1]-self.posBlocage) >= 6.283*self.tour:
-            newPos = np.asarray([self.vectorPos[-1][0]+1*3.1415/180,self.vectorPos[-1][1]+self.sign*1*3.1415/180])
+            newPos = np.asarray([self.vectorPos[-1][0]+1*3.1415/180,self.vectorPos[-1][1]+self.sign*3*3.1415/180])
             self.vectorPos.append(newPos)
             self.tour += 1
         else:
-            newPos = np.asarray([self.vectorPos[-1][0], self.vectorPos[-1][1] + self.sign * 1 * 3.1415 / 180])
+            newPos = np.asarray([self.vectorPos[-1][0], self.vectorPos[-1][1] + self.sign * 3* 3.1415 / 180])
             self.vectorPos.append(newPos)
         return
 
     def go_to_first_collision(self):
-        p.setJointMotorControl2(self.world.ppsId, 2, p.POSITION_CONTROL, targetPosition=93*3.1415/180)
+        p.resetJointState(self.world.ppsId, 2, targetValue=93 * 3.1415 / 180)
         time.sleep(1)
-        p.setJointMotorControl2(self.world.ppsId, 1, p.POSITION_CONTROL, targetPosition=-180*3.1415/180)
+        p.resetJointState(self.world.ppsId, 1, targetValue=-180*3.1415/180)
         time.sleep(5)
         self.update_joint_pos(self.world.ppsId)
         self.vectorPos.append(np.asarray(self.jointPos))
@@ -428,12 +437,22 @@ class FieldPlanner(threading.Thread):
                 self.worksheet.write(row, i, csvData[i])
         return
 
-    """def keyboardInterruptHandler(self,signal, frame):
-        self.workbook.close()
-        exit(0)"""
+    def write_joint_pos(self,row):
+        if not row:
+            titles=['q1','q2','Uatt body1', 'Uatt body2','Uatt body3','Urep body1','Urep body2','Urep body3']
+            for col in range(0,len(titles)):
+                self.worksheet.write(row,col,titles[col])
+        else:
+            csvData=[self.jointPos[0], self.jointPos[1], self.arrayAttFields[-1][0], self.arrayAttFields[-1][1],
+             self.arrayAttFields[-1][2], self.arrayRepFields[-1][0], self.arrayRepFields[-1][1],
+             self.arrayRepFields[-1][2]]
+            for i in range(0,len(csvData)):
+                self.worksheet.write(row, i, csvData[i])
+        return
 
     def construct_C_space(self):
         row=0
+        self.go_to_first_collision()
         while(self.jointPos[0]<160*3.1415/180):
             self.update_arrays_att()
             #self.print_array_att_leoni()

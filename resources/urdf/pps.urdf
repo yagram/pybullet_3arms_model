@@ -32,7 +32,7 @@
     </contact>
     <inertial>
       <origin rpy="0 0 0"  xyz="0.000000 0 0"/>
-      <mass value="0.0"/>
+      <mass value="292.0"/>
       <inertia ixx="1" ixy="0" ixz="0" iyy="1" iyz="0" izz="1"/>
     </inertial>
     <visual>
@@ -62,7 +62,7 @@
 	</contact>
     <inertial>
       <origin rpy="0 0 0" xyz="-55.0 0 0"/>
-      <mass value="0.5"/>
+      <mass value="180"/>
       <inertia ixx="1" ixy="0" ixz="0" iyy="1" iyz="0" izz="1"/>
     </inertial>
     <visual>
@@ -91,7 +91,7 @@
     </contact>
     <inertial>
       <origin rpy="0 0 0" xyz="0 0 0"/>
-      <mass value="0.5"/>
+      <mass value="299"/>
       <inertia ixx="1" ixy="0" ixz="0" iyy="1" iyz="0" izz="1"/>
     </inertial>
     <visual>
@@ -120,7 +120,7 @@
     </contact>
     <inertial>
       <origin rpy="0 0 0" xyz="31.129999 0 0"/>
-      <mass value="0.5"/>
+      <mass value="193.2"/>
       <inertia ixx="1" ixy="0" ixz="0" iyy="1" iyz="0" izz="1"/>
     </inertial>
     <visual>
@@ -147,7 +147,6 @@
 	</joint>
 	
 	<joint name="joint0" type="continuous">
-    <dynamics damping="10000000" friction="10000000"/>
     <parent link="base"/>
     <child link="A1"/>
     <origin xyz="0 0 0" rpy="0 0 0" />
@@ -155,7 +154,6 @@
 	</joint>
 
 	<joint name="joint1" type="continuous">
-    <dynamics damping="10000000" friction="10000000"/>
     <parent link="A1"/>
     <child link="A2"/>
     <origin xyz="-120 0 36" rpy="0 0 0" />
@@ -163,10 +161,9 @@
 	</joint>
     
 	<joint name="joint2" type="continuous">
-    <dynamics damping="10000000" friction="10000000"/>
     <parent link="A2"/>
     <child link="A3"/>
-    <origin xyz="35 0 27" rpy="0 0 0" />
+    <origin xyz="36 0 27" rpy="0 0 0" />
     <axis xyz="0 -1 0" />
 	</joint>
 
