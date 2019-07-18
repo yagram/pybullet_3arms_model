@@ -34,14 +34,14 @@ class FieldPlanner(threading.Thread):
         self.collisionThread = collisionThread
         self.movingJoints = self.get_moving_joints(self.world.ppsId)
         self.dofLeoni = self.get_dof(self.world.ppsId)
-        self.eta=10000000
+        self.eta=1000000
         self.zeta=[10,10,150]
         self.rho0=150
         self.d=100
         self.alpha=0.001
         self.posBlocage=0
         self.tour=0
-        self.sign=-1
+        self.sign=1
         self.collision=False
         self.arrayAttLeoni: List[ndarray] = []
         self.arrayAttObs: List[ndarray] = []
@@ -416,12 +416,16 @@ class FieldPlanner(threading.Thread):
         return
 
     def go_to_first_collision(self):
-        p.resetJointState(self.world.ppsId, 2, targetValue=93 * 3.1415 / 180)
+        p.resetJointState(self.world.ppsId, 2, targetValue=98 * 3.1415 / 180)
         time.sleep(1)
         p.resetJointState(self.world.ppsId, 1, targetValue=-180*3.1415/180)
         time.sleep(5)
         self.update_joint_pos(self.world.ppsId)
         self.vectorPos.append(np.asarray(self.jointPos))
+        self.update_arrays_rep()
+        self.update_arrays_att()
+        self.get_rep_fields()
+        self.get_att_fields()
         return
 
     def write_csv(self, row):
@@ -452,6 +456,8 @@ class FieldPlanner(threading.Thread):
 
     def construct_C_space(self):
         row=0
+        self.write_csv(row)
+        row +=1
         self.go_to_first_collision()
         while(self.jointPos[0]<160*3.1415/180):
             self.update_arrays_att()
@@ -465,6 +471,7 @@ class FieldPlanner(threading.Thread):
             self.go_to_next()
             self.reinit_arrays_rep()
             row +=1
+            time.sleep(0.001)
             #self.print_joint_pos_deg()
 
         return
