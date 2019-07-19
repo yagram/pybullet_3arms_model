@@ -17,12 +17,13 @@ import xlsxwriter
 def __exit(fieldPlanner: FieldPlanner)-> None: #NE PAS mettre de return lorqu'on met "None"
     print("Program is about to close")
     fieldPlanner.workbook.close()
+    fieldPlanner.workbookT.close()
     sys.exit()
 
 
 if __name__ == "__main__":
     goal: List[float] = [40 * 3.1414 / 180, 75 * 3.1415 / 180, 0*3.1415/180]
-    threshold_detection = 200
+    threshold_detection = 2
     logging.basicConfig(level=logging.DEBUG)
     logging.info("main function start")
     world = BulletWorld()

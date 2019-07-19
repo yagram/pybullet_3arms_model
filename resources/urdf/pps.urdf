@@ -38,7 +38,7 @@
     <visual>
       <origin rpy="1.5708 0 0"  xyz="0 0 0"/>
       <geometry>
-        <mesh filename="pps_leoni/pied.obj" scale="1 1 1"/>
+        <mesh filename="pps_leoni/pied.obj" scale="0.01 0.01 0.01"/>
       </geometry>
       <material name="white">
         <color rgba="1 1 1 1"/>
@@ -47,7 +47,7 @@
 	    <collision>
       <origin rpy="1.5708 0 0"  xyz="0.000000 0 0"/>
       <geometry>
-         <mesh filename="pps_leoni/pied.obj" scale="1 1 1"/>
+         <mesh filename="pps_leoni/pied.obj" scale="0.01 0.01 0.01"/>
       </geometry>
     </collision>
   </link>
@@ -61,14 +61,14 @@
 		<kd value ="1.0"/>
 	</contact>
     <inertial>
-      <origin rpy="0 0 0" xyz="-55.0 0 0"/>
+      <origin rpy="0 0 0" xyz="-0.55 0 0"/>
       <mass value="180"/>
       <inertia ixx="1" ixy="0" ixz="0" iyy="1" iyz="0" izz="1"/>
     </inertial>
     <visual>
       <origin rpy=" 1.5708 0 0" xyz="0 0 0"/>
       <geometry>
-        <mesh filename="pps_leoni/bras1.obj" scale="1 1 1"/>
+        <mesh filename="pps_leoni/bras1.obj" scale="0.01 0.01 0.01"/>
       </geometry>
       <material name="white">
         <color rgba="1 1 1 1"/>
@@ -77,7 +77,7 @@
     <collision>
       <origin rpy="1.5708 0 0" xyz="0 0 0"/>
       <geometry>
-         <mesh filename="pps_leoni/bras1.obj" scale="1 1 1"/>
+         <mesh filename="pps_leoni/bras1.obj" scale="0.01 0.01 0.01"/>
       </geometry>
     </collision>
   </link>
@@ -95,18 +95,18 @@
       <inertia ixx="1" ixy="0" ixz="0" iyy="1" iyz="0" izz="1"/>
     </inertial>
     <visual>
-      <origin rpy="1.5708 0 0" xyz="120 0 -36"/>
+      <origin rpy="1.5708 0 0" xyz="1.2 0 -0.36"/>
       <geometry>
-        <mesh filename="pps_leoni/interbras.obj" scale="1 1 1"/>
+        <mesh filename="pps_leoni/interbras.obj" scale="0.01 0.01 0.01"/>
       </geometry>
       <material name="white">
         <color rgba="1 1 1 1"/>
       </material>
     </visual>
     <collision>
-      <origin rpy="1.5708 0 0" xyz="120 0 -36"/>
+      <origin rpy="1.5708 0 0" xyz="1.2 0 -0.36"/>
       <geometry>
-         <mesh filename="pps_leoni/interbras.obj" scale="1 1 1"/>
+         <mesh filename="pps_leoni/interbras.obj" scale="0.01 0.01 0.01"/>
       </geometry>
     </collision>
   </link>
@@ -119,34 +119,36 @@
       <kd value ="1.0"/>
     </contact>
     <inertial>
-      <origin rpy="0 0 0" xyz="31.129999 0 0"/>
+      <origin rpy="0 0 0" xyz="0.31129999 0 0"/>
       <mass value="193.2"/>
       <inertia ixx="1" ixy="0" ixz="0" iyy="1" iyz="0" izz="1"/>
     </inertial>
     <visual>
-      <origin rpy="1.5708 0 0" xyz="86 0 -63"/>
+      <origin rpy="1.5708 0 0" xyz="0.86 0 -0.63"/>
       <geometry>
-        <mesh filename="pps_leoni/BrasExtensionbras2.obj" scale="1 1 1"/>
+        <mesh filename="pps_leoni/BrasExtensionbras2.obj" scale="0.01 0.01 0.01"/>
       </geometry>
       <material name="white">
         <color rgba="1 1 1 1"/>
       </material>
     </visual>
     <collision>
-		<origin rpy="1.5708 0 0" xyz="86 0 -63"/>
+		<origin rpy="1.5708 0 0" xyz="0.86 0 -0.63"/>
 		<geometry>
-			<mesh filename="pps_leoni/BrasExtensionbras2.obj" scale="1 1 1"/>
+			<mesh filename="pps_leoni/BrasExtensionbras2.obj" scale="0.01 0.01 0.01"/>
 		</geometry>
     </collision>
   </link>
 
 	<joint name="base" type="fixed">
+	<dynamics damping="0.0" friction="0.0"/>
     <parent link="isocenter"/>
     <child link="base"/>
-	<origin xyz="0.000000 -195.000000 -110.300003" rpy="0 0 0" />
+	<origin xyz="0.000000 -1.95 -1.10300003" rpy="0 0 0" />
 	</joint>
 	
 	<joint name="joint0" type="continuous">
+	<dynamics damping="0.0" friction="0.0"/>
     <parent link="base"/>
     <child link="A1"/>
     <origin xyz="0 0 0" rpy="0 0 0" />
@@ -154,16 +156,18 @@
 	</joint>
 
 	<joint name="joint1" type="continuous">
+	<dynamics damping="0.0" friction="0.0"/>
     <parent link="A1"/>
     <child link="A2"/>
-    <origin xyz="-120 0 36" rpy="0 0 0" />
+    <origin xyz="-1.2 0 0.36" rpy="0 0 0" />
     <axis xyz="0 0 1" />
 	</joint>
     
 	<joint name="joint2" type="continuous">
+	<dynamics damping="0.0" friction="0.0"/>
     <parent link="A2"/>
     <child link="A3"/>
-    <origin xyz="36 0 27" rpy="0 0 0" />
+    <origin xyz="0.36 0 0.27" rpy="0 0 0" />
     <axis xyz="0 -1 0" />
 	</joint>
 

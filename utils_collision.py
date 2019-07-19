@@ -117,8 +117,7 @@ def compute(p,listCouples, distanceMin, listOfExclusion=[]):
         toTemp = (0, 0, 0)
         if len(closestPointsVec) > 0:
             for c in closestPointsVec:
-                #distCur = round(c[8]*1000)
-                distCur = round(c[8])
+                distCur = c[8]
                 if distCur < distanceMin:
                     distTemp = distCur
                     fromTemp = c[5]

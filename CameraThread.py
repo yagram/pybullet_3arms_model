@@ -21,7 +21,7 @@ class CameraThread(threading.Thread):
         super(CameraThread, self).__init__()  # Constructor of the super class Thread
         self.target = target
         self.name = name
-        self.dist = p.addUserDebugParameter("Distance", 0, 2500, state_camera['dist'])
+        self.dist = p.addUserDebugParameter("Distance", 0, 25, state_camera['dist'])
         self.yaw = p.addUserDebugParameter("Yaw", -180, 180, state_camera['yaw'])
         self.pitch = p.addUserDebugParameter("Pitch", -180, 180, state_camera['pitch'])
         self.target_pos = state_camera['targetPos']
