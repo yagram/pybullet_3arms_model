@@ -52,7 +52,6 @@ class CollisionThread(threading.Thread):
         """Conserve juste les paires pour lesquelles le calcul de collision est nécessaire (pas de self-coll, pas de base, pas d'importance d'ordre)
         """
         # Declare positions and assign to default values"
-
         while p.isConnected():
             #MANUAL_CONTROL est un état qui permet le guidage via les boutons ou via des consignes
             """self.positionJoint0 = p.readUserDebugParameter(self.positionJoint0Id) * 6.28 / 360 #Read the input parameters from sliders
