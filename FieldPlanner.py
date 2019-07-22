@@ -61,13 +61,13 @@ class FieldPlanner(threading.Thread):
         self.vectorPos: List[ndarray] = []
         self.arrayRepForces: List[ndarray] = []
         self.arrayAttForces: List[ndarray] = []
-        self.jointAxis=[[0 for i in range(3)] for i in range(3)]
+        self.jointAxis=[[0 for i in range(3)] for i in range(p.getNumJoints(self.world.ppsId))]
         self.jointTorques= np.zeros(3)
         self.workbook = xlsxwriter.Workbook('forces_on_A3_noObs.xlsx')
         self.worksheet = self.workbook.add_worksheet()
         self.workbookT =xlsxwriter.Workbook('applied_torquesNew.xlsx')
         self.worksheetT= self.workbookT.add_worksheet()
-
+        self.localTCP=np.asarray([1.36,0,1.225]) #position du TCP par rapport à la dernière frame (coordonnées locales)
         """self.qFinal: List[ndarray] = [np.asarray([-0.42134,-2.30351,-1.103]),np.asarray([-0.9193,-2.7213,-0.743])
             ,np.asarray([-1.203,-2.113,-0.473])] #Pour le goal (40,75,0)"""
         self.qFinal: List[ndarray] = [np.asarray([0.00865, -2.4999, -1.103]), np.asarray([0.018875, -3.14985, -0.743])
@@ -86,11 +86,15 @@ class FieldPlanner(threading.Thread):
         row +=1
         #self.construct_C_space()
         while p.isConnected():
+            self.show_joint()
             #self.construct_C_space()
             self.update_arrays_att()
+            self.show_array_att_Leoni()
             #self.print_array_att_leoni()
             self.update_arrays_rep()
-            self.get_att_fields()
+            self.show_array_rep_Leoni()
+            self.reinit_arrays_rep()  # Réinitialisation de la distance
+            """self.get_att_fields()
             self.get_rep_fields()
             #self.print_array_rep_leoni()
             self.update_jacobians()
@@ -112,7 +116,7 @@ class FieldPlanner(threading.Thread):
             self.clear_arrays_forces()
             row +=1
             #self.print_position_all_link(self.world.ppsId)
-        print("finito")
+        print("finito")"""
 
         return
 
@@ -120,8 +124,14 @@ class FieldPlanner(threading.Thread):
         """Permet de récupérer les control points pour l'attraction vers le goal depuis collisionThread"""
         self.clear_arrays_att() #On clear les listes
         for i in range(1, p.getNumJoints(self.world.ppsId)): #On commence à 1 pour éviter la base
-            linkState = p.getLinkState(self.world.ppsId, linkIndex=i)
-            self.arrayAttLeoni.append(linkState[0]) #On sélectionne la position absolue du centre de masse du link
+            if i==p.getNumJoints(self.world.ppsId)-1: #Si on est sur la couch
+                frameToWorld = np.reshape(np.asarray(p.getMatrixFromQuaternion(p.invertTransform(self.jointFrames[-1][0],
+                                                                                                 self.jointFrames[-1][1])[1])),(3, 3))  # On choppe la matrice de passage vers le world
+                globalTCP = np.matmul(self.localTCP, frameToWorld)  #projection du vecteur TCP local sur le world
+                self.arrayAttLeoni.append(self.jointFrames[-1][0]+globalTCP)  #On sélectionne la position absolue du centre de masse du link
+            else:
+                linkState = p.getLinkState(self.world.ppsId, linkIndex=i)
+                self.arrayAttLeoni.append(linkState[0])  # On sélectionne la position absolue du centre de masse du link
         for i in range(0, p.getNumJoints(self.world.myObstacle)):
             linkState = p.getLinkState(self.world.myObstacle, linkIndex=i)
             self.arrayAttObs.append(linkState[0])
@@ -149,6 +159,7 @@ class FieldPlanner(threading.Thread):
                 self.arrayRepObs[ind][1] = np.asarray(results[1][i][0])
                 self.arrayRepObs[ind][2] = results[2][i]
                 self.arrayRepObs[ind][3] = myJointInfo[12]  # link name
+            print("Point on couch: " + str(self.arrayRepLeoni[6][2]))
         return
 
     def reinit_arrays_rep(self):
@@ -201,8 +212,9 @@ class FieldPlanner(threading.Thread):
         """Ici faut s'accrocher, en gros parentFramePos et ParentFrameOrn sont définis par rapport à la frame
         inertielle du link précédent. C'est pour ça que j'utilise getlinkstate pour chopper la position/orientation
         globale des frames intertielles pour chacun des links."""
-        self.jointFrames[0][0]=np.asarray(p.getJointInfo(self.world.ppsId,0)[14])
-        self.jointFrames[0][1]=np.asarray(p.getJointInfo(self.world.ppsId,1)[15])
+        self.jointFrames[0][0]=np.asarray(p.getJointInfo(self.world.ppsId,0)[14]) #Position du joint 1 par rapport à la base
+        self.jointFrames[0][1]=np.asarray(p.getJointInfo(self.world.ppsId,1)[15]) #Orientatation du joint 1 par rapport à la base
+        self.jointAxis[0]=np.asarray(p.getJointInfo(self.world.ppsId,0)[13])
         for i in range(1, p.getNumJoints(self.world.ppsId)):
             relJointPos=np.asarray(p.getJointInfo(self.world.ppsId,i)[14]) #Position relative par rapport à la frame inertielle (exprimé dans cette frame locale)
             linkState=p.getLinkState(self.world.ppsId,i-1) #State du link précédent
@@ -211,7 +223,7 @@ class FieldPlanner(threading.Thread):
             self.jointFrames[i][0]=np.asarray(linkState[0])+np.asarray(relJointPos)
             self.jointFrames[i][1]=self.multiply_quaternions(np.asarray(p.getJointInfo(self.world.ppsId,i)[15]),np.asarray(p.getLinkState(self.world.ppsId,i-1)[1]))
             localJointAxis=p.getJointInfo(self.world.ppsId,i)[13]
-            self.jointAxis[i-1]=np.matmul(np.asarray(localJointAxis),frameToWorld)
+            self.jointAxis[i]=np.matmul(np.asarray(localJointAxis),frameToWorld)
         return
 
     def update_jacobians(self):
@@ -368,6 +380,37 @@ class FieldPlanner(threading.Thread):
         logging.info("Position de chacun des links")
         for link in range(0, p.getNumJoints(self.world.ppsId)):
             print(p.getLinkState(indexBody, link)[0])
+        return
+
+    def show_joint(self):
+        self.update_joint_frame()
+        for jointFrame in self.jointFrames:
+            p.addUserDebugLine(lineFromXYZ=jointFrame[0], lineToXYZ=[jointFrame[0][0],jointFrame[0][1]-1,jointFrame[0][2]
+                                                                    ], lineColorRGB=[1, 0, 0], lineWidth=4,lifeTime=0.5)
+            p.addUserDebugLine(lineFromXYZ=jointFrame[0], lineToXYZ=[jointFrame[0][0],jointFrame[0][1],jointFrame[0][2]+1
+                                                                    ], lineColorRGB=[1, 0, 0], lineWidth=4,lifeTime=0.5)
+        return
+
+    def show_array_att_Leoni(self):
+        for i,attPoint in enumerate(self.arrayAttLeoni):
+            if i==len(self.arrayAttLeoni)-1:
+                p.addUserDebugLine(lineFromXYZ=attPoint, lineToXYZ=[attPoint[0],attPoint[1],attPoint[2]+1
+                                                                        ], lineColorRGB=[0, 1, 0], lineWidth=4,lifeTime=0.5)
+                p.addUserDebugLine(lineFromXYZ=attPoint, lineToXYZ=[attPoint[0],attPoint[1]-1,attPoint[2]
+                                                                        ], lineColorRGB=[0, 1, 0], lineWidth=4,lifeTime=0.5)
+            else:
+                p.addUserDebugLine(lineFromXYZ=attPoint, lineToXYZ=[attPoint[0], attPoint[1], attPoint[2] + 1
+                                                                    ], lineColorRGB=[0, 0, 1], lineWidth=4,
+                                   lifeTime=0.5)
+                p.addUserDebugLine(lineFromXYZ=attPoint, lineToXYZ=[attPoint[0], attPoint[1] - 1, attPoint[2]
+                                                                    ], lineColorRGB=[0, 0, 1], lineWidth=4,lifeTime=0.5)
+        return
+
+    def show_array_rep_Leoni(self):
+        for i in range (len(self.arrayRepLeoni)):
+            if self.arrayRepLeoni[i][2]!=100:
+                my_line=p.addUserDebugLine(lineFromXYZ=self.arrayRepLeoni[i][0], lineToXYZ=self.arrayRepLeoni[i][1], lineColorRGB=[1, 1, 0], lineWidth=2,
+                               lifeTime=0.5)
         return
     # ---------------------------  Création du C-space -------------------------------------#
 

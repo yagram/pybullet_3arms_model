@@ -28,9 +28,16 @@ class CollisionThread(threading.Thread):
         self.positionJoint0Id = p.addUserDebugParameter("Joint0 Pos [deg]", -360, 360, 0) #Create sliders to tune parameters
         self.positionJoint1Id = p.addUserDebugParameter("Joint1 Pos [deg]", -360, 360, 0)
         self.positionJoint2Id = p.addUserDebugParameter("Joint2 Pos [deg]", -180, 180, 0)
+        self.positionJoint3Id = p.addUserDebugParameter("Joint3 Pos [deg]", -180, 180, 0) #Create sliders to tune parameters
+        self.positionJoint4Id = p.addUserDebugParameter("Joint4 Pos [deg]", -180, 180, 0)
+        self.positionJoint5Id = p.addUserDebugParameter("Joint5 Pos [deg]", -180, 180, 0)
         self.positionJoint0 = 0
         self.positionJoint1 = 0
         self.positionJoint2 = 0
+        self.positionJoint3 = 0
+        self.positionJoint4 = 0
+        self.positionJoint5 = 0
+
         #self.MANUAL_CONTROL = 1
 
         p.setRealTimeSimulation(1)
@@ -54,13 +61,19 @@ class CollisionThread(threading.Thread):
         # Declare positions and assign to default values"
         while p.isConnected():
             #MANUAL_CONTROL est un état qui permet le guidage via les boutons ou via des consignes
-            """self.positionJoint0 = p.readUserDebugParameter(self.positionJoint0Id) * 6.28 / 360 #Read the input parameters from sliders
+            self.positionJoint0 = p.readUserDebugParameter(self.positionJoint0Id) * 6.28 / 360 #Read the input parameters from sliders
             self.positionJoint1 = p.readUserDebugParameter(self.positionJoint1Id) * 6.28 / 360
             self.positionJoint2 = p.readUserDebugParameter(self.positionJoint2Id) * 6.28 / 360
+            self.positionJoint3 = p.readUserDebugParameter(self.positionJoint3Id) * 6.28 / 360 #Read the input parameters from sliders
+            self.positionJoint4 = p.readUserDebugParameter(self.positionJoint4Id) * 6.28 / 360
+            self.positionJoint5 = p.readUserDebugParameter(self.positionJoint5Id) * 6.28 / 360
 
             p.resetJointState(self.world.ppsId,1,targetValue=self.positionJoint0)
             p.resetJointState(self.world.ppsId,2,targetValue=self.positionJoint1)
-            p.resetJointState(self.world.ppsId,3,targetValue=self.positionJoint2)"""
+            p.resetJointState(self.world.ppsId,3,targetValue=self.positionJoint2)
+            p.resetJointState(self.world.ppsId,4,targetValue=self.positionJoint3)
+            p.resetJointState(self.world.ppsId,5,targetValue=self.positionJoint4)
+            p.resetJointState(self.world.ppsId,6,targetValue=self.positionJoint5)
 
             """p.setJointMotorControl2(self.world.ppsId, 1, p.POSITION_CONTROL, targetPosition=self.positionJoint0)
             p.setJointMotorControl2(self.world.ppsId, 2, p.POSITION_CONTROL, targetPosition=self.positionJoint1)
@@ -81,13 +94,9 @@ class CollisionThread(threading.Thread):
             ind = self.results[2].index(min(self.results[2]))
             showFrom = self.results[1][ind][0]
             showTo = self.results[1][ind][1]
-            for i in range(0,3):
-                CoM = p.getLinkState(0, i+1)[0]
-                otherPoint = [CoM[0],CoM[1],CoM[2]+1]
-                p.addUserDebugLine(lineFromXYZ=CoM, lineToXYZ=otherPoint, lineColorRGB=[0, 0, 1], lineWidth=4,
-                                   lifeTime=0.5)
-            p.addUserDebugLine(lineFromXYZ=showFrom, lineToXYZ=showTo, lineColorRGB=[1, 1, 0], lineWidth=2,
-                               lifeTime=0.5)
+
+            """p.addUserDebugLine(lineFromXYZ=showFrom, lineToXYZ=showTo, lineColorRGB=[1, 1, 0], lineWidth=2,
+                               lifeTime=0.5)"""
 
         return
 
