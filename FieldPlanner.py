@@ -52,8 +52,8 @@ class FieldPlanner(threading.Thread):
         self.arrayRepObs = [basisList[:] for i in range(p.getNumJoints(self.world.myObstacle))]
         emptyJac = [[0 for i in range(self.dofLeoni)] for y in range(3)]
         emptyForce = [0 for i in range(self.dofLeoni)]
-        self.arrayJacAtt = [emptyJac[:] for i in range(self.dofLeoni)]
-        self.arrayJacRep = [emptyJac[:] for i in range(self.dofLeoni)]
+        self.arrayJacAtt = [emptyJac[:] for i in range(p.getNumJoints(self.world.ppsId)-1)]
+        self.arrayJacRep = [emptyJac[:] for i in range(p.getNumJoints(self.world.ppsId)-1)]
         self.jointPos = [0 for i in range(0, self.dofLeoni)]
         self.jointFrames=[[[0 for i in range(3)],[0 for i in range(4)]]for i in range(p.getNumJoints(self.world.ppsId))]
         self.arrayRepFields: List[ndarray] = []
@@ -67,7 +67,7 @@ class FieldPlanner(threading.Thread):
         self.worksheet = self.workbook.add_worksheet()
         self.workbookT =xlsxwriter.Workbook('applied_torquesNew.xlsx')
         self.worksheetT= self.workbookT.add_worksheet()
-        self.localTCP=np.asarray([1.36,0,1.225]) #position du TCP par rapport à la dernière frame (coordonnées locales)
+        self.localTCP=np.asarray([1.36,0,1.25]) #position du TCP par rapport à la dernière frame (coordonnées locales)
         """self.qFinal: List[ndarray] = [np.asarray([-0.42134,-2.30351,-1.103]),np.asarray([-0.9193,-2.7213,-0.743])
             ,np.asarray([-1.203,-2.113,-0.473])] #Pour le goal (40,75,0)"""
         self.qFinal: List[ndarray] = [np.asarray([0.00865, -2.4999, -1.103]), np.asarray([0.018875, -3.14985, -0.743])
@@ -94,29 +94,29 @@ class FieldPlanner(threading.Thread):
             self.update_arrays_rep()
             self.show_array_rep_Leoni()
             self.reinit_arrays_rep()  # Réinitialisation de la distance
-            """self.get_att_fields()
-            self.get_rep_fields()
+            #self.get_att_fields()
+            #self.get_rep_fields()
             #self.print_array_rep_leoni()
-            self.update_jacobians()
+            #self.update_jacobians()
             #self.write_joint_pos(row)
             #self.print_array_jac_att()
             #self.print_array_jac_rep()
-            self.get_world_rep_forces()
-            self.get_world_att_forces()
+            #self.get_world_rep_forces()
+            #self.get_world_att_forces()
             #self.write_forces(row)
             #self.print_rep_forces()
             #self.print_att_forces()
-            self.proj_world_forces()
-            self.step_forward()
+            #self.proj_world_forces()
+            #self.step_forward()
             #self.write_QST(row)
             #self.print_joint_torques()
             #self.print_joint_torques(jointTorques)
             #self.print_joint_pos_deg()
             self.reinit_arrays_rep() #Réinitialisation de la distance
-            self.clear_arrays_forces()
+            #self.clear_arrays_forces()
             row +=1
             #self.print_position_all_link(self.world.ppsId)
-        print("finito")"""
+        print("finito")
 
         return
 
