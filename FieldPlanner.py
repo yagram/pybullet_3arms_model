@@ -65,9 +65,9 @@ class FieldPlanner(threading.Thread):
         self.jointTorques= np.zeros(3)
         self.workbook = xlsxwriter.Workbook('forces_on_A3_noObs.xlsx')
         self.worksheet = self.workbook.add_worksheet()
-        self.workbookT =xlsxwriter.Workbook('applied_torquesNew.xlsx')
+        self.workbookT =xlsxwriter.Workbook('collect_jacobians_randomConfigNew.xlsx')
         self.worksheetT= self.workbookT.add_worksheet()
-        self.localTCP=np.asarray([1.36,0,1.25]) #position du TCP par rapport à la dernière frame (coordonnées locales)
+        self.localTCP=np.asarray([1.36,0,1.25]) #position du TCP par rapport au dernier joint (coordonnées locales)
         """self.qFinal: List[ndarray] = [np.asarray([-0.42134,-2.30351,-1.103]),np.asarray([-0.9193,-2.7213,-0.743])
             ,np.asarray([-1.203,-2.113,-0.473])] #Pour le goal (40,75,0)"""
         self.qFinal: List[ndarray] = [np.asarray([0.00865, -2.4999, -1.103]), np.asarray([0.018875, -3.14985, -0.743])
@@ -78,22 +78,33 @@ class FieldPlanner(threading.Thread):
     def run(self):
         # Le but de ce thread va être de calculer la séquence de position que doit effectuer nos objets
         time.sleep(1)  # On attends une petite seconde le temps que l'autre thread commence à run
-        #self.get_final_state()
+        # self.get_final_state()
         row=0
-        #self.write_QST(row)
-        #self.write_joint_pos(row)
-        #self.write_forces(row)
-        row +=1
-        #self.construct_C_space()
+        # self.write_QST(row)
+        # self.write_joint_pos(row)
+        # self.write_forces(row)
+        # row +=1
+        # self.construct_C_space()
+        #self.show_joint()
+        # self.construct_C_space()
+        self.update_arrays_att()
+        #self.show_array_att_Leoni()
+        # self.print_array_att_leoni()
+        self.update_arrays_rep()
+        self.show_array_rep_Leoni()
+        # self.get_att_fields()
+        # self.get_rep_fields()
+        # self.print_array_rep_leoni()
+        self.update_jacobians()
+        #self.write_jacobians()
         while p.isConnected():
-            self.show_joint()
+            #self.show_joint()
             #self.construct_C_space()
-            self.update_arrays_att()
-            self.show_array_att_Leoni()
+            #self.update_arrays_att()
+            #self.show_array_att_Leoni()
             #self.print_array_att_leoni()
-            self.update_arrays_rep()
-            self.show_array_rep_Leoni()
-            self.reinit_arrays_rep()  # Réinitialisation de la distance
+            #self.update_arrays_rep()
+            #self.show_array_rep_Leoni()
             #self.get_att_fields()
             #self.get_rep_fields()
             #self.print_array_rep_leoni()
@@ -112,7 +123,7 @@ class FieldPlanner(threading.Thread):
             #self.print_joint_torques()
             #self.print_joint_torques(jointTorques)
             #self.print_joint_pos_deg()
-            self.reinit_arrays_rep() #Réinitialisation de la distance
+            #self.reinit_arrays_rep() #Réinitialisation de la distance
             #self.clear_arrays_forces()
             row +=1
             #self.print_position_all_link(self.world.ppsId)
@@ -126,9 +137,10 @@ class FieldPlanner(threading.Thread):
         for i in range(1, p.getNumJoints(self.world.ppsId)): #On commence à 1 pour éviter la base
             if i==p.getNumJoints(self.world.ppsId)-1: #Si on est sur la couch
                 frameToWorld = np.reshape(np.asarray(p.getMatrixFromQuaternion(p.invertTransform(self.jointFrames[-1][0],
-                                                                                                 self.jointFrames[-1][1])[1])),(3, 3))  # On choppe la matrice de passage vers le world
-                globalTCP = np.matmul(self.localTCP, frameToWorld)  #projection du vecteur TCP local sur le world
-                self.arrayAttLeoni.append(self.jointFrames[-1][0]+globalTCP)  #On sélectionne la position absolue du centre de masse du link
+                                                                                                 self.jointFrames[-1][1])[1])),(3, 3))
+                # On choppe la matrice de passage vers le world
+                relglobalTCP = np.matmul(self.localTCP, frameToWorld)  #projection du vecteur TCP local sur le world
+                self.arrayAttLeoni.append(self.jointFrames[-1][0]+relglobalTCP)  #On sélectionne la position absolue du centre de masse du link
             else:
                 linkState = p.getLinkState(self.world.ppsId, linkIndex=i)
                 self.arrayAttLeoni.append(linkState[0])  # On sélectionne la position absolue du centre de masse du link
@@ -159,7 +171,7 @@ class FieldPlanner(threading.Thread):
                 self.arrayRepObs[ind][1] = np.asarray(results[1][i][0])
                 self.arrayRepObs[ind][2] = results[2][i]
                 self.arrayRepObs[ind][3] = myJointInfo[12]  # link name
-            print("Point on couch: " + str(self.arrayRepLeoni[6][2]))
+            #print("Point on couch: " + str(self.arrayRepLeoni[6][2]))
         return
 
     def reinit_arrays_rep(self):
@@ -180,8 +192,7 @@ class FieldPlanner(threading.Thread):
         return
 
     def CoM_to_point(self, indexBody, worldPoint) -> tuple:
-        """localPoint est un vecteur allant du CoM au point de répulsion
-        À vérifier"""
+        """localPoint est un vecteur allant du CoM au point de répulsion"""
         localPoint = tuple(np.subtract(worldPoint, self.jointFrames[indexBody][0])) #vecteur coordonnées absolues à projeter
         linkState=p.getLinkState(self.world.ppsId,indexBody) #Ici j'avais mis -1 puis jl'ai retiré et ca a fonctionné
         #Correspond à la transformation du world vers la frame locale.
@@ -195,7 +206,10 @@ class FieldPlanner(threading.Thread):
     def frame_to_CoM(self, indexBody) -> tuple:
         """Permet de récupérer l'attribut localInertialFramePosition
         valeur xyz de "inertial" dans l'urdf"""
-        localPoint = p.getLinkState(self.world.ppsId, indexBody)[2]
+        if indexBody==p.getNumJoints(self.world.ppsId)-1:
+            localPoint= np.asarray(self.localTCP) #coordonnées locales du TCP directement
+        else:
+            localPoint = p.getLinkState(self.world.ppsId, indexBody)[2]
         return localPoint
 
     def update_joint_pos(self, indexBody):
@@ -229,7 +243,7 @@ class FieldPlanner(threading.Thread):
     def update_jacobians(self):
         """Permet de récolter la matrice jacobienne de translation par rapport à chacun des points
         Cette fonction doit être vérifiée !"""
-        velVec = [0 for i in range(0, 3)]
+        velVec = [0 for i in range(self.dofLeoni)]
         accVec = velVec
         self.update_joint_pos(self.world.ppsId) #On update la position des joints histoire d'être sur
         self.update_joint_frame()
@@ -386,31 +400,31 @@ class FieldPlanner(threading.Thread):
         self.update_joint_frame()
         for jointFrame in self.jointFrames:
             p.addUserDebugLine(lineFromXYZ=jointFrame[0], lineToXYZ=[jointFrame[0][0],jointFrame[0][1]-1,jointFrame[0][2]
-                                                                    ], lineColorRGB=[1, 0, 0], lineWidth=4,lifeTime=0.5)
+                                                                    ], lineColorRGB=[1, 0, 0], lineWidth=4,lifeTime=100)
             p.addUserDebugLine(lineFromXYZ=jointFrame[0], lineToXYZ=[jointFrame[0][0],jointFrame[0][1],jointFrame[0][2]+1
-                                                                    ], lineColorRGB=[1, 0, 0], lineWidth=4,lifeTime=0.5)
+                                                                    ], lineColorRGB=[1, 0, 0], lineWidth=4,lifeTime=100)
         return
 
     def show_array_att_Leoni(self):
         for i,attPoint in enumerate(self.arrayAttLeoni):
             if i==len(self.arrayAttLeoni)-1:
                 p.addUserDebugLine(lineFromXYZ=attPoint, lineToXYZ=[attPoint[0],attPoint[1],attPoint[2]+1
-                                                                        ], lineColorRGB=[0, 1, 0], lineWidth=4,lifeTime=0.5)
+                                                                        ], lineColorRGB=[0, 1, 0], lineWidth=4,lifeTime=100)
                 p.addUserDebugLine(lineFromXYZ=attPoint, lineToXYZ=[attPoint[0],attPoint[1]-1,attPoint[2]
-                                                                        ], lineColorRGB=[0, 1, 0], lineWidth=4,lifeTime=0.5)
+                                                                        ], lineColorRGB=[0, 1, 0], lineWidth=4,lifeTime=100)
             else:
                 p.addUserDebugLine(lineFromXYZ=attPoint, lineToXYZ=[attPoint[0], attPoint[1], attPoint[2] + 1
                                                                     ], lineColorRGB=[0, 0, 1], lineWidth=4,
-                                   lifeTime=0.5)
+                                   lifeTime=100)
                 p.addUserDebugLine(lineFromXYZ=attPoint, lineToXYZ=[attPoint[0], attPoint[1] - 1, attPoint[2]
-                                                                    ], lineColorRGB=[0, 0, 1], lineWidth=4,lifeTime=0.5)
+                                                                    ], lineColorRGB=[0, 0, 1], lineWidth=4,lifeTime=100)
         return
 
     def show_array_rep_Leoni(self):
         for i in range (len(self.arrayRepLeoni)):
             if self.arrayRepLeoni[i][2]!=100:
                 my_line=p.addUserDebugLine(lineFromXYZ=self.arrayRepLeoni[i][0], lineToXYZ=self.arrayRepLeoni[i][1], lineColorRGB=[1, 1, 0], lineWidth=2,
-                               lifeTime=0.5)
+                               lifeTime=100)
         return
     # ---------------------------  Création du C-space -------------------------------------#
 
@@ -536,6 +550,37 @@ class FieldPlanner(threading.Thread):
                 self.worksheetT.write(row, i, csvData[i])
         return
 
+    def write_jacobians(self):
+        line=0
+        separation=['Jatt1','Jatt2','Jatt3','Jatt4','Jatt5','Jatt6','Jatt7','Jrep1','Jrep2','Jrep3','Jrep4','Jrep5','Jrep6','Jrep7']
+        for jac in range(len(self.arrayJacAtt)):
+            csvData=[separation[jac]]
+            self.worksheetT.write(line, 0, csvData[0])
+            print("My current Jacobian: " + str(csvData))
+            line += 1
+            currentJac=self.arrayJacAtt[jac]
+            for row in range(3):
+                csvData=[currentJac[row][0],currentJac[row][1],currentJac[row][2],currentJac[row][3]
+                        ,currentJac[row][4],currentJac[row][5]]
+                print("My row in jacobian: " + str(csvData))
+                for col in range(len(csvData)):
+                    self.worksheetT.write(line, col, csvData[col])
+                line +=1
+        for jac in range(len(self.arrayJacRep)):
+            csvData = [separation[jac+len(self.arrayJacAtt)]]
+            self.worksheetT.write(line, 0, csvData[0])
+            print("My current Jacobian: " + str(csvData))
+            line += 1
+            currentJac = self.arrayJacRep[jac]
+            for row in range(3):
+                csvData = [currentJac[row][0], currentJac[row][1], currentJac[row][2], currentJac[row][3]
+                    , currentJac[row][4], currentJac[row][5]]
+                print("My row in jacobian: " + str(csvData))
+                for col in range(len(csvData)):
+                    self.worksheetT.write(line, col, csvData[col])
+                line += 1
+        return
+        
     def construct_C_space(self):
         row=0
         self.write_csv(row)
