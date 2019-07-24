@@ -36,7 +36,7 @@ class FieldPlanner(threading.Thread):
         self.movingJoints = self.get_moving_joints(self.world.ppsId)
         self.dofLeoni = self.get_dof(self.world.ppsId)
         self.eta=1
-        self.zeta=[500,500,2750]
+        self.zeta=[1000,1000,1000,1000,2000,2000,2000]
         self.rho0=1.50
         self.d=0.75
         self.alpha0=0.001
@@ -68,72 +68,36 @@ class FieldPlanner(threading.Thread):
         self.workbookT =xlsxwriter.Workbook('collect_jacobians_randomConfigNew.xlsx')
         self.worksheetT= self.workbookT.add_worksheet()
         self.localTCP=np.asarray([1.36,0,1.25]) #position du TCP par rapport au dernier joint (coordonnées locales)
-        """self.qFinal: List[ndarray] = [np.asarray([-0.42134,-2.30351,-1.103]),np.asarray([-0.9193,-2.7213,-0.743])
-            ,np.asarray([-1.203,-2.113,-0.473])] #Pour le goal (40,75,0)"""
-        self.qFinal: List[ndarray] = [np.asarray([0.00865, -2.4999, -1.103]), np.asarray([0.018875, -3.14985, -0.743])
-            , np.asarray([0.54876, -3.56, -0.473])]  # Pour le goal (90.947,-128.842,0)
 
+        self.qFinal: List[ndarray] = self.qFinal_TCP_Iso()
         return
 
     def run(self):
         # Le but de ce thread va être de calculer la séquence de position que doit effectuer nos objets
         time.sleep(1)  # On attends une petite seconde le temps que l'autre thread commence à run
-        # self.get_final_state()
         row=0
-        # self.write_QST(row)
-        # self.write_joint_pos(row)
-        # self.write_forces(row)
-        # row +=1
-        # self.construct_C_space()
-        #self.show_joint()
-        # self.construct_C_space()
-        self.update_arrays_att()
-        #self.show_array_att_Leoni()
-        # self.print_array_att_leoni()
-        self.update_arrays_rep()
-        self.show_array_rep_Leoni()
-        # self.get_att_fields()
-        # self.get_rep_fields()
-        # self.print_array_rep_leoni()
-        self.update_jacobians()
-        #self.write_jacobians()
+        #self.get_final_state()
         while p.isConnected():
-            #self.show_joint()
-            #self.construct_C_space()
-            #self.update_arrays_att()
-            #self.show_array_att_Leoni()
-            #self.print_array_att_leoni()
-            #self.update_arrays_rep()
-            #self.show_array_rep_Leoni()
-            #self.get_att_fields()
-            #self.get_rep_fields()
-            #self.print_array_rep_leoni()
-            #self.update_jacobians()
-            #self.write_joint_pos(row)
-            #self.print_array_jac_att()
-            #self.print_array_jac_rep()
-            #self.get_world_rep_forces()
-            #self.get_world_att_forces()
-            #self.write_forces(row)
-            #self.print_rep_forces()
-            #self.print_att_forces()
-            #self.proj_world_forces()
-            #self.step_forward()
-            #self.write_QST(row)
-            #self.print_joint_torques()
-            #self.print_joint_torques(jointTorques)
-            #self.print_joint_pos_deg()
-            #self.reinit_arrays_rep() #Réinitialisation de la distance
-            #self.clear_arrays_forces()
+            self.update_arrays_att()
+            self.update_arrays_rep()
+            self.show_joint()
+            self.show_array_att_Leoni()
+            # # #self.get_att_fields()
+            # # #self.get_rep_fields()
+            self.update_jacobians()
+            self.get_world_rep_forces()
+            self.get_world_att_forces()
+            self.proj_world_forces()
+            self.step_forward()
+            self.reinit_arrays_rep() #Réinitialisation de la distance
+            self.clear_arrays_forces()
             row +=1
-            #self.print_position_all_link(self.world.ppsId)
-        print("finito")
-
         return
 
     def update_arrays_att(self):
         """Permet de récupérer les control points pour l'attraction vers le goal depuis collisionThread"""
         self.clear_arrays_att() #On clear les listes
+        self.update_joint_frame()
         for i in range(1, p.getNumJoints(self.world.ppsId)): #On commence à 1 pour éviter la base
             if i==p.getNumJoints(self.world.ppsId)-1: #Si on est sur la couch
                 frameToWorld = np.reshape(np.asarray(p.getMatrixFromQuaternion(p.invertTransform(self.jointFrames[-1][0],
@@ -283,11 +247,11 @@ class FieldPlanner(threading.Thread):
 
     def proj_world_forces(self):
         """Projection des world forces sur les joints du robot et somme des contributions attractives et répulsives"""
-        self.jointTorques=np.zeros(3) #Important de remettre à 0 le vecteur des torques
-        for i in range(0, self.dofLeoni):
+        self.jointTorques=np.zeros(self.dofLeoni) #Important de remettre à 0 le vecteur des torques
+        for i in range(0, len(self.arrayAttForces)):
             projForce = np.matmul(np.asarray(self.arrayAttForces[i]), np.asarray(self.arrayJacAtt[i]))
             self.jointTorques += projForce
-        for i in range(0, self.dofLeoni):
+        for i in range(0, len(self.arrayRepForces)):
             projForce = np.matmul(np.asarray(self.arrayRepForces[i]), np.asarray(self.arrayJacRep[i]))
             self.jointTorques += projForce
         return
@@ -297,15 +261,15 @@ class FieldPlanner(threading.Thread):
         avec la méthode du gradient descent"""
         normTorque = np.linalg.norm(self.jointTorques, 2)
         self.update_joint_pos(self.world.ppsId)
-        nextPos=np.zeros(3)
+        nextPos=np.zeros(self.dofLeoni)
         rho=np.linalg.norm(self.goal-self.jointPos,2)
         #alpha=0.01
-        alpha=self.alpha0+(self.alphai-self.alpha0)/(np.linalg.norm(self.goal,2))*rho
         for index in range(0,self.dofLeoni):
             """ATTENTION, IL FAUT CHANGER le vecteur GOAL si jamais !"""
+            alpha = self.alpha0 + (self.alphai - self.alpha0) / (np.linalg.norm(self.goal, 2)) * rho
             nextPos[index]= self.jointPos[index] + alpha*self.jointTorques[index]/normTorque
             p.setJointMotorControl2(self.world.ppsId, index+1, p.POSITION_CONTROL, targetPosition=nextPos[index],
-                                    force=MAX_TORQUE,maxVelocity=MAX_SPEED)
+                                     force=MAX_TORQUE,maxVelocity=MAX_SPEED)
         self.update_joint_pos(self.world.ppsId)
         return
 
@@ -340,41 +304,52 @@ class FieldPlanner(threading.Thread):
         Q3[3]=Q1[3] * Q2[3] - Q1[0] * Q2[0] - Q1[1] * Q2[1] - Q1[2] * Q2[2]
         return Q3
 
+    def qFinal_TCP_Iso(self) -> List[ndarray]:
+        qFinal: List[ndarray]=[]
+        qFinal.append(np.asarray([-0.5495600586635379, -1.9719941338026488, -0.95]))
+        qFinal.append(np.asarray([-1.1606118397775795, -1.9659986614383649, -0.62]))
+        qFinal.append(np.asarray([-0.6831019380962688, -1.5685090749454542, -0.62]))
+        qFinal.append(np.asarray([-0.09230542738407244, -1.07671726095879, -0.62]))
+        qFinal.append(np.asarray([0, -0.9999447659533591, -0.45]))
+        qFinal.append(np.asarray([0, -1.1699447650397679, -0.21050000000000002]))
+        qFinal.append(np.asarray([0,0,0]))
+        return qFinal
+
     # -------------------------------------- PRINTERS --------------------------------------------------- #
     def print_array_rep_leoni(self):
         print("Repulsive points for Leoni:")
-        for i in range(0,self.dofLeoni):
-            print(self.arrayRepLeoni[i])
+        for elem in self.arrayRepLeoni:
+            print(elem)
         return
 
     def print_array_att_leoni(self):
         print("Attractive points for Leoni")
-        for i in range(0,self.dofLeoni):
-            print(self.arrayAttLeoni[i])
+        for elem in self.arrayAttLeoni:
+            print(elem)
         return
 
     def print_array_jac_rep(self):
         logging.info("Repulsive jacobian matrices")
-        for i in range(0, self.dofLeoni):
-            logging.info(str(self.arrayJacRep[i]))
+        for elem in self.arrayJacRep:
+            logging.info(str(elem))
         return
 
     def print_array_jac_att(self):
         logging.info("Attractive jacobian matrices")
-        for i in range(0,self.dofLeoni):
-            logging.info(str(self.arrayJacAtt[i]))
+        for elem in self.arrayJacAtt:
+            logging.info(str(elem))
         return
 
     def print_att_forces(self):
         print("World attractive forces")
-        for i in range(0,self.dofLeoni):
-            print(str(self.arrayAttForces[i]))
+        for elem in self.arrayAttForces:
+            print(str(elem))
         return
 
     def print_rep_forces(self):
         print("World repulsive forces")
-        for i in range(0,self.dofLeoni):
-            print(str(self.arrayRepForces[i]))
+        for elem in self.arrayRepForces:
+            print(str(elem))
         return
 
 
@@ -400,31 +375,31 @@ class FieldPlanner(threading.Thread):
         self.update_joint_frame()
         for jointFrame in self.jointFrames:
             p.addUserDebugLine(lineFromXYZ=jointFrame[0], lineToXYZ=[jointFrame[0][0],jointFrame[0][1]-1,jointFrame[0][2]
-                                                                    ], lineColorRGB=[1, 0, 0], lineWidth=4,lifeTime=100)
+                                                                    ], lineColorRGB=[1, 0, 0], lineWidth=4,lifeTime=1)
             p.addUserDebugLine(lineFromXYZ=jointFrame[0], lineToXYZ=[jointFrame[0][0],jointFrame[0][1],jointFrame[0][2]+1
-                                                                    ], lineColorRGB=[1, 0, 0], lineWidth=4,lifeTime=100)
+                                                                    ], lineColorRGB=[1, 0, 0], lineWidth=4,lifeTime=1)
         return
 
     def show_array_att_Leoni(self):
         for i,attPoint in enumerate(self.arrayAttLeoni):
             if i==len(self.arrayAttLeoni)-1:
                 p.addUserDebugLine(lineFromXYZ=attPoint, lineToXYZ=[attPoint[0],attPoint[1],attPoint[2]+1
-                                                                        ], lineColorRGB=[0, 1, 0], lineWidth=4,lifeTime=100)
+                                                                        ], lineColorRGB=[0, 1, 0], lineWidth=4,lifeTime=1)
                 p.addUserDebugLine(lineFromXYZ=attPoint, lineToXYZ=[attPoint[0],attPoint[1]-1,attPoint[2]
-                                                                        ], lineColorRGB=[0, 1, 0], lineWidth=4,lifeTime=100)
+                                                                        ], lineColorRGB=[0, 1, 0], lineWidth=4,lifeTime=1)
             else:
                 p.addUserDebugLine(lineFromXYZ=attPoint, lineToXYZ=[attPoint[0], attPoint[1], attPoint[2] + 1
                                                                     ], lineColorRGB=[0, 0, 1], lineWidth=4,
-                                   lifeTime=100)
+                                   lifeTime=1)
                 p.addUserDebugLine(lineFromXYZ=attPoint, lineToXYZ=[attPoint[0], attPoint[1] - 1, attPoint[2]
-                                                                    ], lineColorRGB=[0, 0, 1], lineWidth=4,lifeTime=100)
+                                                                    ], lineColorRGB=[0, 0, 1], lineWidth=4,lifeTime=1)
         return
 
     def show_array_rep_Leoni(self):
         for i in range (len(self.arrayRepLeoni)):
             if self.arrayRepLeoni[i][2]!=100:
                 my_line=p.addUserDebugLine(lineFromXYZ=self.arrayRepLeoni[i][0], lineToXYZ=self.arrayRepLeoni[i][1], lineColorRGB=[1, 1, 0], lineWidth=2,
-                               lifeTime=100)
+                               lifeTime=1)
         return
     # ---------------------------  Création du C-space -------------------------------------#
 

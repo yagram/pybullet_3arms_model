@@ -61,12 +61,12 @@ class CollisionThread(threading.Thread):
         # Declare positions and assign to default values"
         while p.isConnected():
             #MANUAL_CONTROL est un état qui permet le guidage via les boutons ou via des consignes
-            self.positionJoint0 = p.readUserDebugParameter(self.positionJoint0Id) * 6.28 / 360 #Read the input parameters from sliders
-            self.positionJoint1 = p.readUserDebugParameter(self.positionJoint1Id) * 6.28 / 360
-            self.positionJoint2 = p.readUserDebugParameter(self.positionJoint2Id) * 6.28 / 360
-            self.positionJoint3 = p.readUserDebugParameter(self.positionJoint3Id) * 6.28 / 360 #Read the input parameters from sliders
-            self.positionJoint4 = p.readUserDebugParameter(self.positionJoint4Id) * 6.28 / 360
-            self.positionJoint5 = p.readUserDebugParameter(self.positionJoint5Id) * 6.28 / 360
+            # self.positionJoint0 = p.readUserDebugParameter(self.positionJoint0Id) * 6.28 / 360 #Read the input parameters from sliders
+            # self.positionJoint1 = p.readUserDebugParameter(self.positionJoint1Id) * 6.28 / 360
+            # self.positionJoint2 = p.readUserDebugParameter(self.positionJoint2Id) * 6.28 / 360
+            # self.positionJoint3 = p.readUserDebugParameter(self.positionJoint3Id) * 6.28 / 360 #Read the input parameters from sliders
+            # self.positionJoint4 = p.readUserDebugParameter(self.positionJoint4Id) * 6.28 / 360
+            # self.positionJoint5 = p.readUserDebugParameter(self.positionJoint5Id) * 6.28 / 360
 
             p.resetJointState(self.world.ppsId,1,targetValue=self.positionJoint0)
             p.resetJointState(self.world.ppsId,2,targetValue=self.positionJoint1)
@@ -104,4 +104,7 @@ class CollisionThread(threading.Thread):
         self.positionJoint0 = goal[0]
         self.positionJoint1 = goal[1]
         self.positionJoint2 = goal[2]
+        self.positionJoint3 = goal[3]
+        self.positionJoint4 = goal[4]
+        self.positionJoint5 = goal[5]
         return

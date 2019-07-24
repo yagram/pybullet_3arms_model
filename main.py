@@ -22,8 +22,7 @@ def __exit(fieldPlanner: FieldPlanner)-> None: #NE PAS mettre de return lorqu'on
 
 
 if __name__ == "__main__":
-    #goal = np.asarray([40 * 3.1414 / 180, 75 * 3.1415 / 180, 0 * 3.1415 / 180])
-    goal= np.asarray([90.947 * 3.1414 / 180, -128.842* 3.1415 / 180, 0*3.1415/180])
+    goal= np.asarray([0.04,0.6542,0,0,0,0.8767])
     threshold_detection = 2
     logging.basicConfig(level=logging.DEBUG)
     logging.info("main function start")
