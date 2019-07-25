@@ -67,13 +67,13 @@ class CollisionThread(threading.Thread):
             # self.positionJoint3 = p.readUserDebugParameter(self.positionJoint3Id) * 6.28 / 360 #Read the input parameters from sliders
             # self.positionJoint4 = p.readUserDebugParameter(self.positionJoint4Id) * 6.28 / 360
             # self.positionJoint5 = p.readUserDebugParameter(self.positionJoint5Id) * 6.28 / 360
-
-            p.resetJointState(self.world.ppsId,1,targetValue=self.positionJoint0)
-            p.resetJointState(self.world.ppsId,2,targetValue=self.positionJoint1)
-            p.resetJointState(self.world.ppsId,3,targetValue=self.positionJoint2)
-            p.resetJointState(self.world.ppsId,4,targetValue=self.positionJoint3)
-            p.resetJointState(self.world.ppsId,5,targetValue=self.positionJoint4)
-            p.resetJointState(self.world.ppsId,6,targetValue=self.positionJoint5)
+            #
+            # p.resetJointState(self.world.ppsId,1,targetValue=self.positionJoint0)
+            # p.resetJointState(self.world.ppsId,2,targetValue=self.positionJoint1)
+            # p.resetJointState(self.world.ppsId,3,targetValue=self.positionJoint2)
+            # p.resetJointState(self.world.ppsId,4,targetValue=self.positionJoint3)
+            # p.resetJointState(self.world.ppsId,5,targetValue=self.positionJoint4)
+            # p.resetJointState(self.world.ppsId,6,targetValue=self.positionJoint5)
 
             """p.setJointMotorControl2(self.world.ppsId, 1, p.POSITION_CONTROL, targetPosition=self.positionJoint0)
             p.setJointMotorControl2(self.world.ppsId, 2, p.POSITION_CONTROL, targetPosition=self.positionJoint1)

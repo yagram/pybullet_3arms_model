@@ -22,7 +22,7 @@ def __exit(fieldPlanner: FieldPlanner)-> None: #NE PAS mettre de return lorqu'on
 
 
 if __name__ == "__main__":
-    goal= np.asarray([0.04,0.6542,0,0,0,0.8767])
+    goal= np.asarray([0.04,0.6542,0,0,0,0.8767]) #TCP to isocentre
     threshold_detection = 2
     logging.basicConfig(level=logging.DEBUG)
     logging.info("main function start")

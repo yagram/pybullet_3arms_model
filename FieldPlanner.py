@@ -37,10 +37,10 @@ class FieldPlanner(threading.Thread):
         self.dofLeoni = self.get_dof(self.world.ppsId)
         self.eta=1
         self.zeta=[1000,1000,1000,1000,2000,2000,2000]
-        self.rho0=1.50
+        self.rho0=1.5
         self.d=0.75
-        self.alpha0=0.001
         self.alphai=0.01
+        self.alpha0=0.0001
         self.posBlocage=0
         self.tour=0
         self.sign=1
@@ -68,6 +68,9 @@ class FieldPlanner(threading.Thread):
         self.workbookT =xlsxwriter.Workbook('collect_jacobians_randomConfigNew.xlsx')
         self.worksheetT= self.workbookT.add_worksheet()
         self.localTCP=np.asarray([1.36,0,1.25]) #position du TCP par rapport au dernier joint (coordonnées locales)
+        self.dampingPitchRoll=0.1 #Rajout d'un damping sur les joints
+        self.weightForTorques=np.asarray([[1,0,0,0,0,0],[0,1,0,0,0,0],[0,0,self.dampingPitchRoll,0,0,0],[0,0,0,self.dampingPitchRoll,0,0],
+                                          [0,0,0,0,self.dampingPitchRoll,0],[0,0,0,0,0,1]]).reshape(self.dofLeoni,self.dofLeoni)
 
         self.qFinal: List[ndarray] = self.qFinal_TCP_Iso()
         return
@@ -80,8 +83,8 @@ class FieldPlanner(threading.Thread):
         while p.isConnected():
             self.update_arrays_att()
             self.update_arrays_rep()
-            self.show_joint()
-            self.show_array_att_Leoni()
+            #self.show_joint()
+            #self.show_array_att_Leoni()
             # # #self.get_att_fields()
             # # #self.get_rep_fields()
             self.update_jacobians()
@@ -254,6 +257,15 @@ class FieldPlanner(threading.Thread):
         for i in range(0, len(self.arrayRepForces)):
             projForce = np.matmul(np.asarray(self.arrayRepForces[i]), np.asarray(self.arrayJacRep[i]))
             self.jointTorques += projForce
+        self.torque_weighting() #weight pour le pitch/roll
+        return
+
+    def torque_weighting(self):
+        newTorques=np.matmul(self.jointTorques,self.weightForTorques)
+        myNorm=np.linalg.norm(newTorques,2)
+        if myNorm > 0.00001:
+            newTorques=newTorques/myNorm
+            self.jointTorques=newTorques*np.linalg.norm(self.jointTorques)
         return
 
     def step_forward(self):
@@ -267,11 +279,15 @@ class FieldPlanner(threading.Thread):
         for index in range(0,self.dofLeoni):
             """ATTENTION, IL FAUT CHANGER le vecteur GOAL si jamais !"""
             alpha = self.alpha0 + (self.alphai - self.alpha0) / (np.linalg.norm(self.goal, 2)) * rho
-            nextPos[index]= self.jointPos[index] + alpha*self.jointTorques[index]/normTorque
-            p.setJointMotorControl2(self.world.ppsId, index+1, p.POSITION_CONTROL, targetPosition=nextPos[index],
-                                     force=MAX_TORQUE,maxVelocity=MAX_SPEED)
+            if normTorque > 0.00001:
+                #nextPos[index] = self.jointPos[index] + alpha *(self.goal[index]-self.jointPos[index])
+                nextPos[index] = self.jointPos[index] + alpha * self.jointTorques[index] / normTorque
+            else:
+                nextPos[index] = self.jointPos[index] + alpha * (self.goal[index] - self.jointPos[index])
+            p.setJointMotorControl2(self.world.ppsId, index+1, p.POSITION_CONTROL, targetPosition=nextPos[index],force=MAX_TORQUE,maxVelocity=MAX_SPEED)
         self.update_joint_pos(self.world.ppsId)
         return
+
 
     def get_moving_joints(self, indexBody):
         """Array qui contient l'indice des joints mobiles"""
