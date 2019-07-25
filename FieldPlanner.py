@@ -36,11 +36,12 @@ class FieldPlanner(threading.Thread):
         self.movingJoints = self.get_moving_joints(self.world.ppsId)
         self.dofLeoni = self.get_dof(self.world.ppsId)
         self.eta=1
-        self.zeta=[1000,1000,1000,1000,2000,2000,2000]
-        self.rho0=1.50
+        self.zeta=2000
+        self.rho0=1.5
         self.d=0.75
-        self.alpha0=0.001
-        self.alphai=0.01
+        self.alphai=0.001
+        self.alpha0=1e-5
+        self.D=1
         self.posBlocage=0
         self.tour=0
         self.sign=1
@@ -51,8 +52,7 @@ class FieldPlanner(threading.Thread):
         self.arrayRepLeoni = [basisList[:] for i in range(p.getNumJoints(self.world.ppsId)-1)] # Il est nécessaire d'initialiser la liste
         self.arrayRepObs = [basisList[:] for i in range(p.getNumJoints(self.world.myObstacle))]
         emptyJac = [[0 for i in range(self.dofLeoni)] for y in range(3)]
-        emptyForce = [0 for i in range(self.dofLeoni)]
-        self.arrayJacAtt = [emptyJac[:] for i in range(p.getNumJoints(self.world.ppsId)-1)]
+        self.arrayJacAtt = emptyJac
         self.arrayJacRep = [emptyJac[:] for i in range(p.getNumJoints(self.world.ppsId)-1)]
         self.jointPos = [0 for i in range(0, self.dofLeoni)]
         self.jointFrames=[[[0 for i in range(3)],[0 for i in range(4)]]for i in range(p.getNumJoints(self.world.ppsId))]
@@ -68,8 +68,13 @@ class FieldPlanner(threading.Thread):
         self.workbookT =xlsxwriter.Workbook('collect_jacobians_randomConfigNew.xlsx')
         self.worksheetT= self.workbookT.add_worksheet()
         self.localTCP=np.asarray([1.36,0,1.25]) #position du TCP par rapport au dernier joint (coordonnées locales)
-
+        self.dampingPitchRoll=0.1 #Rajout d'un damping sur les joints
+        self.weightForTorques=np.asarray([[1,0,0,0,0,0],[0,1,0,0,0,0],[0,0,self.dampingPitchRoll,0,0,0],[0,0,0,self.dampingPitchRoll,0,0],
+                                          [0,0,0,0,self.dampingPitchRoll,0],[0,0,0,0,0,1]]).reshape(self.dofLeoni,self.dofLeoni)
         self.qFinal: List[ndarray] = self.qFinal_TCP_Iso()
+        # self.jointsForXYZ=[0,1,1,0,0,0,1,0]
+        # self.jointsForRPY=[0,0,0,1,1,1,0,0]
+
         return
 
     def run(self):
@@ -80,8 +85,8 @@ class FieldPlanner(threading.Thread):
         while p.isConnected():
             self.update_arrays_att()
             self.update_arrays_rep()
-            self.show_joint()
-            self.show_array_att_Leoni()
+            #self.show_joint()
+            #self.show_array_att_Leoni()
             # # #self.get_att_fields()
             # # #self.get_rep_fields()
             self.update_jacobians()
@@ -95,7 +100,9 @@ class FieldPlanner(threading.Thread):
         return
 
     def update_arrays_att(self):
-        """Permet de récupérer les control points pour l'attraction vers le goal depuis collisionThread"""
+        """Permet de récupérer les control points pour l'attraction vers le goal depuis collisionThread
+        J'ai quand même gardé la matrice complète des centres de masse parce que c'est une info intéressante
+        quand même"""
         self.clear_arrays_att() #On clear les listes
         self.update_joint_frame()
         for i in range(1, p.getNumJoints(self.world.ppsId)): #On commence à 1 pour éviter la base
@@ -213,13 +220,15 @@ class FieldPlanner(threading.Thread):
         self.update_joint_frame()
         for index in range(1, p.getNumJoints(self.world.ppsId)): #On parcourt 3 éléments
             localPoint = self.CoM_to_point(index, self.arrayRepLeoni[index-1][0])
-            localCoM = self.frame_to_CoM(index)
             tempJac = p.calculateJacobian(self.world.ppsId, index, localPoint, self.jointPos, velVec, accVec)[0]
             self.arrayJacRep[index-1] = tempJac
-            tempJac = p.calculateJacobian(self.world.ppsId, index, localCoM, self.jointPos, velVec, accVec)[0] #Always at CoM
-            self.arrayJacAtt[index-1] = tempJac
+            if index == p.getNumJoints(self.world.ppsId)-1:
+                localCoM = self.frame_to_CoM(index)
+                tempJac = p.calculateJacobian(self.world.ppsId, index, localCoM, self.jointPos, velVec, accVec)[0] #Always at CoM
+                self.arrayJacAtt= tempJac
             #logging.info("Test localInertialFramePosition: " + str(self.frame_to_CoM(index+1)))
         return
+
 
     def get_world_rep_forces(self):
         """Calcul des forces de répulsion dans l'espace 3D"""
@@ -235,25 +244,33 @@ class FieldPlanner(threading.Thread):
         return
 
     def get_world_att_forces(self):
-        """Calcul des forces d'attraction dans l'espace 3D"""
-        for i in range(0, len(self.arrayAttLeoni)):
-            vec = self.arrayAttLeoni[i]-self.qFinal[i]
-            dist = np.linalg.norm(vec, 2)
-            if dist <= self.d:
-                self.arrayAttForces.append(-self.zeta[i]*vec)
-            else:
-                self.arrayAttForces.append(-self.d*self.zeta[i]*vec/dist)
+        """Calcul de la force d'attraction du TCP dans l'espace 3D"""
+        vec = self.arrayAttLeoni[-1]-self.qFinal[-1]
+        dist = np.linalg.norm(vec, 2)
+        if dist <= self.d:
+            self.arrayAttForces.append(-self.zeta*vec)
+        else:
+            self.arrayAttForces.append(-self.d*self.zeta*vec/dist)
         return
 
     def proj_world_forces(self):
         """Projection des world forces sur les joints du robot et somme des contributions attractives et répulsives"""
         self.jointTorques=np.zeros(self.dofLeoni) #Important de remettre à 0 le vecteur des torques
-        for i in range(0, len(self.arrayAttForces)):
-            projForce = np.matmul(np.asarray(self.arrayAttForces[i]), np.asarray(self.arrayJacAtt[i]))
-            self.jointTorques += projForce
+
+        projForce = np.matmul(np.asarray(self.arrayAttForces[0]), np.asarray(self.arrayJacAtt)) #Pour le TCP
+        self.jointTorques += projForce
         for i in range(0, len(self.arrayRepForces)):
             projForce = np.matmul(np.asarray(self.arrayRepForces[i]), np.asarray(self.arrayJacRep[i]))
             self.jointTorques += projForce
+        self.torque_weighting() #weight pour le pitch/roll
+        return
+
+    def torque_weighting(self):
+        newTorques=np.matmul(self.jointTorques,self.weightForTorques)
+        myNorm=np.linalg.norm(newTorques,2)
+        if myNorm > 0.00001:
+            newTorques=newTorques/myNorm
+            self.jointTorques=newTorques*np.linalg.norm(self.jointTorques)
         return
 
     def step_forward(self):
@@ -263,15 +280,21 @@ class FieldPlanner(threading.Thread):
         self.update_joint_pos(self.world.ppsId)
         nextPos=np.zeros(self.dofLeoni)
         rho=np.linalg.norm(self.goal-self.jointPos,2)
-        #alpha=0.01
+        #alpha=10
+        #self.compute_Laplacian_Field()
         for index in range(0,self.dofLeoni):
             """ATTENTION, IL FAUT CHANGER le vecteur GOAL si jamais !"""
             alpha = self.alpha0 + (self.alphai - self.alpha0) / (np.linalg.norm(self.goal, 2)) * rho
-            nextPos[index]= self.jointPos[index] + alpha*self.jointTorques[index]/normTorque
-            p.setJointMotorControl2(self.world.ppsId, index+1, p.POSITION_CONTROL, targetPosition=nextPos[index],
-                                     force=MAX_TORQUE,maxVelocity=MAX_SPEED)
+            if normTorque > 0.00001:
+                #nextPos[index] = self.jointPos[index] + alpha *(self.goal[index]-self.jointPos[index])
+                nextPos[index] = self.jointPos[index] + alpha * self.D*self.jointTorques[index] / normTorque
+            else:
+                nextPos[index] = self.jointPos[index] + alpha * (self.goal[index] - self.jointPos[index])
+            p.setJointMotorControl2(self.world.ppsId, index+1, p.POSITION_CONTROL, targetPosition=nextPos[index],force=MAX_TORQUE,maxVelocity=MAX_SPEED)
         self.update_joint_pos(self.world.ppsId)
+        #print("My step: " + str(self.D))
         return
+
 
     def get_moving_joints(self, indexBody):
         """Array qui contient l'indice des joints mobiles"""
@@ -304,14 +327,29 @@ class FieldPlanner(threading.Thread):
         Q3[3]=Q1[3] * Q2[3] - Q1[0] * Q2[0] - Q1[1] * Q2[1] - Q1[2] * Q2[2]
         return Q3
 
+    def compute_Laplacian_Field(self):
+        self.D=1 #reinitialization of D
+        for i in range(0, len(self.arrayRepLeoni)):
+            vec=self.arrayRepLeoni[i][0]-self.arrayRepLeoni[i][1]
+            rho=self.arrayRepLeoni[i][2]
+            grad=vec/rho
+            gradT=np.reshape(grad,(3,1))
+            laplacianRho=2/rho
+            self.D += self.eta*1/math.pow(rho,4)*np.matmul(grad,gradT)
+            self.D += 2*self.eta*(1/rho-1/self.rho0)/math.pow(rho,3)*np.matmul(grad,gradT)
+            self.D -= self.eta*(1/rho-1/self.rho0)*1/math.pow(rho,2)*laplacianRho
+        self.D +=3*self.zeta #attractive part
+        self.D = 1/self.D
+        return
+
     def qFinal_TCP_Iso(self) -> List[ndarray]:
         qFinal: List[ndarray]=[]
-        qFinal.append(np.asarray([-0.5495600586635379, -1.9719941338026488, -0.95]))
-        qFinal.append(np.asarray([-1.1606118397775795, -1.9659986614383649, -0.62]))
-        qFinal.append(np.asarray([-0.6831019380962688, -1.5685090749454542, -0.62]))
-        qFinal.append(np.asarray([-0.09230542738407244, -1.07671726095879, -0.62]))
-        qFinal.append(np.asarray([0, -0.9999447659533591, -0.45]))
-        qFinal.append(np.asarray([0, -1.1699447650397679, -0.21050000000000002]))
+        # qFinal.append(np.asarray([-0.5495600586635379, -1.9719941338026488, -0.95]))
+        # qFinal.append(np.asarray([-1.1606118397775795, -1.9659986614383649, -0.62]))
+        # qFinal.append(np.asarray([-0.6831019380962688, -1.5685090749454542, -0.62]))
+        # qFinal.append(np.asarray([-0.09230542738407244, -1.07671726095879, -0.62]))
+        # qFinal.append(np.asarray([0, -0.9999447659533591, -0.45]))
+        # qFinal.append(np.asarray([0, -1.1699447650397679, -0.21050000000000002]))
         qFinal.append(np.asarray([0,0,0]))
         return qFinal
 
@@ -417,13 +455,12 @@ class FieldPlanner(threading.Thread):
 
     def get_att_fields(self):
         fields = []
-        for i in range(0, len(self.arrayAttLeoni)):
-            vec = self.arrayAttLeoni[i] - self.qFinal[i]
-            dist = np.linalg.norm(vec, 2)
-            if dist <= self.d:
-                fields.append(0.5 * self.zeta[i] * math.pow(dist, 2))
-            else:
-                fields.append(self.d * self.zeta[i] * dist - 0.5 * self.zeta[i] * math.pow(self.d, 2))
+        vec = self.arrayAttLeoni[-1] - self.qFinal[-1]
+        dist = np.linalg.norm(vec, 2)
+        if dist <= self.d:
+            fields.append(0.5 * self.zeta * math.pow(dist, 2))
+        else:
+            fields.append(self.d * self.zeta * dist - 0.5 * self.zeta * math.pow(self.d, 2))
         self.arrayAttFields.append(np.asarray(fields))
         return
 
