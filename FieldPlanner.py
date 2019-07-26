@@ -74,6 +74,9 @@ class FieldPlanner(threading.Thread):
         self.qFinal: List[ndarray] = self.qFinal_TCP_Iso()
         # self.jointsForXYZ=[0,1,1,0,0,0,1,0]
         # self.jointsForRPY=[0,0,0,1,1,1,0,0]
+        # emptyJac = [[0 for i in range(3)] for y in range(3)]
+        # self.arrayJacAtt = emptyJac # Dans les deux cas la Jacobienne sera une 3x3
+        # self.arrayJacRep = [emptyJac[:] for i in range(p.getNumJoints(self.world.ppsId)-1)]
 
         return
 
@@ -228,7 +231,6 @@ class FieldPlanner(threading.Thread):
                 self.arrayJacAtt= tempJac
             #logging.info("Test localInertialFramePosition: " + str(self.frame_to_CoM(index+1)))
         return
-
 
     def get_world_rep_forces(self):
         """Calcul des forces de répulsion dans l'espace 3D"""
