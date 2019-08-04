@@ -67,7 +67,7 @@ class CollisionThread(threading.Thread):
             # self.positionJoint3 = p.readUserDebugParameter(self.positionJoint3Id) * 6.28 / 360 #Read the input parameters from sliders
             # self.positionJoint4 = p.readUserDebugParameter(self.positionJoint4Id) * 6.28 / 360
             # self.positionJoint5 = p.readUserDebugParameter(self.positionJoint5Id) * 6.28 / 360
-
+            #
             # p.resetJointState(self.world.ppsId,1,targetValue=self.positionJoint0)
             # p.resetJointState(self.world.ppsId,2,targetValue=self.positionJoint1)
             # p.resetJointState(self.world.ppsId,3,targetValue=self.positionJoint2)

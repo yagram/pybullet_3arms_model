@@ -10,12 +10,15 @@ import math
 from typing import List
 import sys
 import xlsxwriter
+from pytictoc import TicToc
+
 import utils_collision
 import register
 logging.basicConfig(level=logging.DEBUG)
 
 MAX_SPEED = 6*3.1415/180 #Medical speed
 MAX_TORQUE = 0.96*171*9.2 #efficiency*gear ratio * motor torque
+ACCURACY=5e-4
 class FieldPlanner(threading.Thread):
 
     def __init__(self,
@@ -40,7 +43,7 @@ class FieldPlanner(threading.Thread):
         self.rho0=1.5
         self.d=0.75
         self.alphai=0.001
-        self.alpha0=1e-5
+        self.alpha0=1e-4
         self.D=1
         self.posBlocage=0
         self.tour=0
@@ -51,8 +54,9 @@ class FieldPlanner(threading.Thread):
         basisList=[[0, 0, 0], [0, 0, 0], 100, "Name"]
         self.arrayRepLeoni = [basisList[:] for i in range(p.getNumJoints(self.world.ppsId)-1)] # Il est nécessaire d'initialiser la liste
         self.arrayRepObs = [basisList[:] for i in range(p.getNumJoints(self.world.myObstacle))]
-        emptyJac = [[0 for i in range(self.dofLeoni)] for y in range(3)]
+        emptyJac = [[0 for i in range(3)] for y in range(3)]
         self.arrayJacAtt = emptyJac
+        self.arrayJacAttRot = emptyJac
         self.arrayJacRep = [emptyJac[:] for i in range(p.getNumJoints(self.world.ppsId)-1)]
         self.jointPos = [0 for i in range(0, self.dofLeoni)]
         self.jointFrames=[[[0 for i in range(3)],[0 for i in range(4)]]for i in range(p.getNumJoints(self.world.ppsId))]
@@ -72,12 +76,9 @@ class FieldPlanner(threading.Thread):
         self.weightForTorques=np.asarray([[1,0,0,0,0,0],[0,1,0,0,0,0],[0,0,self.dampingPitchRoll,0,0,0],[0,0,0,self.dampingPitchRoll,0,0],
                                           [0,0,0,0,self.dampingPitchRoll,0],[0,0,0,0,0,1]]).reshape(self.dofLeoni,self.dofLeoni)
         self.qFinal: List[ndarray] = self.qFinal_TCP_Iso()
-        # self.jointsForXYZ=[0,1,1,0,0,0,1,0]
-        # self.jointsForRPY=[0,0,0,1,1,1,0,0]
-        # emptyJac = [[0 for i in range(3)] for y in range(3)]
-        # self.arrayJacAtt = emptyJac # Dans les deux cas la Jacobienne sera une 3x3
-        # self.arrayJacRep = [emptyJac[:] for i in range(p.getNumJoints(self.world.ppsId)-1)]
-
+        self.jointsForXYZ=[1,1,1,0,0,1,0]
+        self.jointsForRPY=[0,0,0,1,1,1,0]
+        self.state="GoToXYZ"
         return
 
     def run(self):
@@ -86,6 +87,8 @@ class FieldPlanner(threading.Thread):
         row=0
         #self.get_final_state()
         while p.isConnected():
+            myTimer=TicToc()
+            myTimer.tic()
             self.update_arrays_att()
             self.update_arrays_rep()
             #self.show_joint()
@@ -96,10 +99,12 @@ class FieldPlanner(threading.Thread):
             self.get_world_rep_forces()
             self.get_world_att_forces()
             self.proj_world_forces()
+            # self.update_jacobian_att()
+            # self.update_jacobian_rep()
             self.step_forward()
+            self.check_accuracy()
             self.reinit_arrays_rep() #Réinitialisation de la distance
             self.clear_arrays_forces()
-            row +=1
         return
 
     def update_arrays_att(self):
@@ -117,7 +122,7 @@ class FieldPlanner(threading.Thread):
                 self.arrayAttLeoni.append(self.jointFrames[-1][0]+relglobalTCP)  #On sélectionne la position absolue du centre de masse du link
             else:
                 linkState = p.getLinkState(self.world.ppsId, linkIndex=i)
-                self.arrayAttLeoni.append(linkState[0])  # On sélectionne la position absolue du centre de masse du link
+                self.arrayAttLeoni.append(np.asarray(linkState[0]))  # On sélectionne la position absolue du centre de masse du link
         for i in range(0, p.getNumJoints(self.world.myObstacle)):
             linkState = p.getLinkState(self.world.myObstacle, linkIndex=i)
             self.arrayAttObs.append(linkState[0])
@@ -223,14 +228,43 @@ class FieldPlanner(threading.Thread):
         self.update_joint_frame()
         for index in range(1, p.getNumJoints(self.world.ppsId)): #On parcourt 3 éléments
             localPoint = self.CoM_to_point(index, self.arrayRepLeoni[index-1][0])
-            tempJac = p.calculateJacobian(self.world.ppsId, index, localPoint, self.jointPos, velVec, accVec)[0]
-            self.arrayJacRep[index-1] = tempJac
+            jac = p.calculateJacobian(self.world.ppsId, index, localPoint, self.jointPos, velVec, accVec)
+            transJac=jac[0]
+            transJac=self.select_subJac_trans(transJac)
+            self.arrayJacRep[index-1] = transJac
             if index == p.getNumJoints(self.world.ppsId)-1:
                 localCoM = self.frame_to_CoM(index)
-                tempJac = p.calculateJacobian(self.world.ppsId, index, localCoM, self.jointPos, velVec, accVec)[0] #Always at CoM
-                self.arrayJacAtt= tempJac
+                jac = p.calculateJacobian(self.world.ppsId, index, localCoM, self.jointPos, velVec, accVec) #Always at CoM
+                transJac = jac[0]
+                rotJac = jac[1]
+                transJac=self.select_subJac_trans(transJac)
+                rotJac = self.select_subJac_rot(rotJac)
+                self.arrayJacAtt= transJac
+                self.arrayJacAttRot= rotJac
             #logging.info("Test localInertialFramePosition: " + str(self.frame_to_CoM(index+1)))
         return
+
+    def select_subJac_trans(self,myJac):
+        newJac=np.ndarray(shape=(3,self.jointsForXYZ.count(1)))
+        col=0
+        for i,enable in enumerate(self.jointsForXYZ):
+            if enable:
+                newJac[0][col]=myJac[0][i]
+                newJac[1][col] = myJac[1][i]
+                newJac[2][col] = myJac[2][i]
+                col +=1
+        return newJac
+
+    def select_subJac_rot(self,myJac):
+        newJac=np.ndarray(shape=(3,self.jointsForRPY.count(1)))
+        col=0
+        for i,enable in enumerate(self.jointsForRPY):
+            if enable:
+                newJac[0][col]=myJac[0][i]
+                newJac[1][col] = myJac[1][i]
+                newJac[2][col] = myJac[2][i]
+                col +=1
+        return newJac
 
     def get_world_rep_forces(self):
         """Calcul des forces de répulsion dans l'espace 3D"""
@@ -247,7 +281,7 @@ class FieldPlanner(threading.Thread):
 
     def get_world_att_forces(self):
         """Calcul de la force d'attraction du TCP dans l'espace 3D"""
-        vec = self.arrayAttLeoni[-1]-self.qFinal[-1]
+        vec = self.arrayAttLeoni[-1]-self.qFinal[0]
         dist = np.linalg.norm(vec, 2)
         if dist <= self.d:
             self.arrayAttForces.append(-self.zeta*vec)
@@ -257,14 +291,14 @@ class FieldPlanner(threading.Thread):
 
     def proj_world_forces(self):
         """Projection des world forces sur les joints du robot et somme des contributions attractives et répulsives"""
-        self.jointTorques=np.zeros(self.dofLeoni) #Important de remettre à 0 le vecteur des torques
-
-        projForce = np.matmul(np.asarray(self.arrayAttForces[0]), np.asarray(self.arrayJacAtt)) #Pour le TCP
+        self.jointTorques=np.zeros(self.jointsForXYZ.count(1))
+        #Important de remettre à 0 le vecteur des torques, la taille est égale au nombre de enable joints
+        projForce = np.matmul(self.arrayAttForces[0], self.arrayJacAtt) #Pour le TCP
         self.jointTorques += projForce
         for i in range(0, len(self.arrayRepForces)):
-            projForce = np.matmul(np.asarray(self.arrayRepForces[i]), np.asarray(self.arrayJacRep[i]))
+            projForce = np.matmul(self.arrayRepForces[i], self.arrayJacRep[i])
             self.jointTorques += projForce
-        self.torque_weighting() #weight pour le pitch/roll
+        #self.torque_weighting() #weight pour le pitch/roll
         return
 
     def torque_weighting(self):
@@ -282,17 +316,27 @@ class FieldPlanner(threading.Thread):
         self.update_joint_pos(self.world.ppsId)
         nextPos=np.zeros(self.dofLeoni)
         rho=np.linalg.norm(self.goal-self.jointPos,2)
-        #alpha=10
-        #self.compute_Laplacian_Field()
-        for index in range(0,self.dofLeoni):
+        indexTT=0
+        indexTR=0
+        for index,enable in enumerate(self.jointsForXYZ):
             """ATTENTION, IL FAUT CHANGER le vecteur GOAL si jamais !"""
-            alpha = self.alpha0 + (self.alphai - self.alpha0) / (np.linalg.norm(self.goal, 2)) * rho
-            if normTorque > 0.00001:
-                #nextPos[index] = self.jointPos[index] + alpha *(self.goal[index]-self.jointPos[index])
-                nextPos[index] = self.jointPos[index] + alpha * self.D*self.jointTorques[index] / normTorque
-            else:
-                nextPos[index] = self.jointPos[index] + alpha * (self.goal[index] - self.jointPos[index])
-            p.setJointMotorControl2(self.world.ppsId, index+1, p.POSITION_CONTROL, targetPosition=nextPos[index],force=MAX_TORQUE,maxVelocity=MAX_SPEED)
+            if enable:
+                alpha = self.alpha0 + (self.alphai - self.alpha0) / (np.linalg.norm(self.goal, 2)) * rho
+                nextPos[index] = self.jointPos[index] + alpha * self.D*self.jointTorques[indexTT] / normTorque
+                p.setJointMotorControl2(self.world.ppsId, index+1, p.POSITION_CONTROL, targetPosition=nextPos[index],force=MAX_TORQUE,maxVelocity=MAX_SPEED)
+                indexTT +=1
+        if self.state=="GoToRPY":
+            targetQuat=p.getQuaternionFromEuler(self.qFinal[1]) #orientation désirée du TCP
+            TCPToWorld=p.invertTransform([0,0,0],p.getLinkState(self.world.ppsId,self.dofLeoni+1)[1])[1] #quaternion de transformation entre les 2 orientations
+            TCPToTarget=self.multiply_quaternions(targetQuat,TCPToWorld) #Conversion en angles d'Euler
+            TCPToTarget=p.getEulerFromQuaternion(TCPToTarget)
+            errorAngles=np.matmul(np.array(TCPToTarget),self.arrayJacAttRot) #Projection des erreurs d'angles en erreur de coordonnées robots
+            for index, enable in enumerate(self.jointsForRPY):
+                if enable:
+                    nextPos[index] = self.jointPos[index] +errorAngles[indexTR]
+                    p.setJointMotorControl2(self.world.ppsId, index + 1, p.POSITION_CONTROL,
+                                            targetPosition=nextPos[index], force=MAX_TORQUE, maxVelocity=MAX_SPEED)
+                    indexTR +=1
         self.update_joint_pos(self.world.ppsId)
         #print("My step: " + str(self.D))
         return
@@ -309,17 +353,6 @@ class FieldPlanner(threading.Thread):
     def get_dof(self, indexBody):
         """Renvoie le nombre de dofs"""
         return len(self.movingJoints)
-
-    def get_final_state(self):
-        """Permet de récupérer les coordonnées des centres de masse finaux"""
-        self.collisionThread.go_to_target_pos(self.goal)
-        time.sleep(1.0) #Je veux laisser le temps pour qu'il atteigne la position en question
-        for i in range(0, len(self.goal)):
-            linkState = p.getLinkState(self.world.ppsId, i+1)
-            self.qFinal.append(np.asarray(linkState[0]))
-
-        #self.collisionThread.go_to_target_pos([0, 0, 0])
-        return
 
     def multiply_quaternions(self,Q1,Q2):
         Q3=np.zeros(4)
@@ -346,14 +379,17 @@ class FieldPlanner(threading.Thread):
 
     def qFinal_TCP_Iso(self) -> List[ndarray]:
         qFinal: List[ndarray]=[]
-        # qFinal.append(np.asarray([-0.5495600586635379, -1.9719941338026488, -0.95]))
-        # qFinal.append(np.asarray([-1.1606118397775795, -1.9659986614383649, -0.62]))
-        # qFinal.append(np.asarray([-0.6831019380962688, -1.5685090749454542, -0.62]))
-        # qFinal.append(np.asarray([-0.09230542738407244, -1.07671726095879, -0.62]))
-        # qFinal.append(np.asarray([0, -0.9999447659533591, -0.45]))
-        # qFinal.append(np.asarray([0, -1.1699447650397679, -0.21050000000000002]))
         qFinal.append(np.asarray([0,0,0]))
+        qFinal.append(np.asarray([-90*3.1415/180,10*3.1415/180,0]))
+
         return qFinal
+
+    def check_accuracy(self):
+        state=[False,False]
+        distFromIso=np.linalg.norm(self.qFinal[0]-self.arrayAttLeoni[-1],2)
+        if distFromIso < ACCURACY:
+            self.state="GoToRPY"
+        return
 
     # -------------------------------------- PRINTERS --------------------------------------------------- #
     def print_array_rep_leoni(self):
@@ -457,7 +493,7 @@ class FieldPlanner(threading.Thread):
 
     def get_att_fields(self):
         fields = []
-        vec = self.arrayAttLeoni[-1] - self.qFinal[-1]
+        vec = self.arrayAttLeoni[-1] - self.qFinal[0]
         dist = np.linalg.norm(vec, 2)
         if dist <= self.d:
             fields.append(0.5 * self.zeta * math.pow(dist, 2))
@@ -566,20 +602,18 @@ class FieldPlanner(threading.Thread):
 
     def write_jacobians(self):
         line=0
-        separation=['Jatt1','Jatt2','Jatt3','Jatt4','Jatt5','Jatt6','Jatt7','Jrep1','Jrep2','Jrep3','Jrep4','Jrep5','Jrep6','Jrep7']
-        for jac in range(len(self.arrayJacAtt)):
-            csvData=[separation[jac]]
-            self.worksheetT.write(line, 0, csvData[0])
-            print("My current Jacobian: " + str(csvData))
-            line += 1
-            currentJac=self.arrayJacAtt[jac]
-            for row in range(3):
-                csvData=[currentJac[row][0],currentJac[row][1],currentJac[row][2],currentJac[row][3]
-                        ,currentJac[row][4],currentJac[row][5]]
-                print("My row in jacobian: " + str(csvData))
-                for col in range(len(csvData)):
-                    self.worksheetT.write(line, col, csvData[col])
-                line +=1
+        separation=['Jatt1','Jatt7','Jrep1','Jrep2','Jrep3','Jrep4','Jrep5','Jrep6','Jrep7']
+        csvData=[separation[0]]
+        self.worksheetT.write(line, 0, csvData[0])
+        print("My current Jacobian: " + str(csvData))
+        line += 1
+        for row in range(3):
+            csvData=[self.arrayJacAtt[0],self.arrayJacAtt[1],self.arrayJacAtt[2],self.arrayJacAtt[3]
+                    ,self.arrayJacAtt[4],self.arrayJacAtt[5]]
+            print("My row in jacobian: " + str(csvData))
+            for col in range(len(csvData)):
+                self.worksheetT.write(line, col, csvData[col])
+            line +=1
         for jac in range(len(self.arrayJacRep)):
             csvData = [separation[jac+len(self.arrayJacAtt)]]
             self.worksheetT.write(line, 0, csvData[0])
