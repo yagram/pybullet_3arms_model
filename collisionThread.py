@@ -25,18 +25,24 @@ class CollisionThread(threading.Thread):
         self.world = world
         self.results = []
         self.listCouples = []
-        self.positionJoint0Id = p.addUserDebugParameter("Joint0 Pos [deg]", -360, 360, 0) #Create sliders to tune parameters
-        self.positionJoint1Id = p.addUserDebugParameter("Joint1 Pos [deg]", -360, 360, 0)
+        self.positionJoint0Id = p.addUserDebugParameter("Joint0 Pos [deg]", -360, 360, 98.526) #Create sliders to tune parameters
+        self.positionJoint1Id = p.addUserDebugParameter("Joint1 Pos [deg]", -360, 360, 234.94)
         self.positionJoint2Id = p.addUserDebugParameter("Joint2 Pos [deg]", -180, 180, 0)
         self.positionJoint3Id = p.addUserDebugParameter("Joint3 Pos [deg]", -180, 180, 0) #Create sliders to tune parameters
         self.positionJoint4Id = p.addUserDebugParameter("Joint4 Pos [deg]", -180, 180, 0)
-        self.positionJoint5Id = p.addUserDebugParameter("Joint5 Pos [deg]", -180, 180, 0)
-        self.positionJoint0 = 0
-        self.positionJoint1 = 0
+        self.positionJoint5Id = p.addUserDebugParameter("Joint5 Pos [deg]", -180, 180, 64.4)
+        self.positionJoint0 = 98.526*3.1415/180
+        self.positionJoint1 = 234.94*3.1415/180
         self.positionJoint2 = 0
         self.positionJoint3 = 0
         self.positionJoint4 = 0
-        self.positionJoint5 = 0
+        self.positionJoint5 = 64.4*3.1415/180
+        p.resetJointState(self.world.ppsId, 1, targetValue=self.positionJoint0)
+        p.resetJointState(self.world.ppsId, 2, targetValue=self.positionJoint1)
+        p.resetJointState(self.world.ppsId, 3, targetValue=self.positionJoint2)
+        p.resetJointState(self.world.ppsId, 4, targetValue=self.positionJoint3)
+        p.resetJointState(self.world.ppsId, 5, targetValue=self.positionJoint4)
+        p.resetJointState(self.world.ppsId, 6, targetValue=self.positionJoint5)
 
         #self.MANUAL_CONTROL = 1
 
@@ -67,7 +73,7 @@ class CollisionThread(threading.Thread):
             # self.positionJoint3 = p.readUserDebugParameter(self.positionJoint3Id) * 6.28 / 360 #Read the input parameters from sliders
             # self.positionJoint4 = p.readUserDebugParameter(self.positionJoint4Id) * 6.28 / 360
             # self.positionJoint5 = p.readUserDebugParameter(self.positionJoint5Id) * 6.28 / 360
-            #
+            # #
             # p.resetJointState(self.world.ppsId,1,targetValue=self.positionJoint0)
             # p.resetJointState(self.world.ppsId,2,targetValue=self.positionJoint1)
             # p.resetJointState(self.world.ppsId,3,targetValue=self.positionJoint2)
@@ -101,10 +107,10 @@ class CollisionThread(threading.Thread):
         return
 
     def go_to_target_pos(self, goal):
-        self.positionJoint0 = goal[0]
-        self.positionJoint1 = goal[1]
-        self.positionJoint2 = goal[2]
-        self.positionJoint3 = goal[3]
-        self.positionJoint4 = goal[4]
-        self.positionJoint5 = goal[5]
+        # self.positionJoint0 = goal[0]
+        # self.positionJoint1 = goal[1]
+        # self.positionJoint2 = goal[2]
+        # self.positionJoint3 = goal[3]
+        # self.positionJoint4 = goal[4]
+        # self.positionJoint5 = goal[5]
         return

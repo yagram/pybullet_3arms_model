@@ -39,7 +39,8 @@ class FieldPlanner(threading.Thread):
         self.movingJoints = self.get_moving_joints(self.world.ppsId)
         self.dofLeoni = self.get_dof(self.world.ppsId)
         self.eta=1
-        self.zeta=2000
+        # self.zeta=2000
+        self.zeta = 10
         self.rho0=1.5
         self.d=0.75
         self.alphai=0.001
@@ -380,8 +381,8 @@ class FieldPlanner(threading.Thread):
     def qFinal_TCP_Iso(self) -> List[ndarray]:
         qFinal: List[ndarray]=[]
         qFinal.append(np.asarray([0,0,0]))
-        qFinal.append(np.asarray([-90*3.1415/180,10*3.1415/180,0]))
-
+        #qFinal.append(np.asarray([-90*3.1415/180,10*3.1415/180,0]))
+        qFinal.append(np.asarray([0, 0, 90*3.1415/180]))
         return qFinal
 
     def check_accuracy(self):
