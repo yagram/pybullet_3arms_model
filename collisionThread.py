@@ -54,17 +54,13 @@ class CollisionThread(threading.Thread):
         # Declare positions and assign to default values"
         while p.isConnected():
             #MANUAL_CONTROL est un état qui permet le guidage via les boutons ou via des consignes
-            """self.positionJoint0 = p.readUserDebugParameter(self.positionJoint0Id) * 6.28 / 360 #Read the input parameters from sliders
+            self.positionJoint0 = p.readUserDebugParameter(self.positionJoint0Id) * 6.28 / 360 #Read the input parameters from sliders
             self.positionJoint1 = p.readUserDebugParameter(self.positionJoint1Id) * 6.28 / 360
             self.positionJoint2 = p.readUserDebugParameter(self.positionJoint2Id) * 6.28 / 360
 
-            p.resetJointState(self.world.ppsId,1,targetValue=self.positionJoint0)
-            p.resetJointState(self.world.ppsId,2,targetValue=self.positionJoint1)
-            p.resetJointState(self.world.ppsId,3,targetValue=self.positionJoint2)"""
-
-            """p.setJointMotorControl2(self.world.ppsId, 1, p.POSITION_CONTROL, targetPosition=self.positionJoint0)
+            p.setJointMotorControl2(self.world.ppsId, 1, p.POSITION_CONTROL, targetPosition=self.positionJoint0)
             p.setJointMotorControl2(self.world.ppsId, 2, p.POSITION_CONTROL, targetPosition=self.positionJoint1)
-            p.setJointMotorControl2(self.world.ppsId, 3, p.POSITION_CONTROL, targetPosition=self.positionJoint2)"""
+            p.setJointMotorControl2(self.world.ppsId, 3, p.POSITION_CONTROL, targetPosition=self.positionJoint2)
             #logging.info("Voici la valeur de positionJoint0: " + str(self.positionJoint0))
             #logging.info("Voici la valeur de positionJoint1: " + str(self.positionJoint1))
             #logging.info("Voici la valeur de positionJoint2: " + str(self.positionJoint2))
@@ -82,12 +78,14 @@ class CollisionThread(threading.Thread):
             showFrom = self.results[1][ind][0]
             showTo = self.results[1][ind][1]
             for i in range(0,3):
+                showFrom = self.results[1][i][0]
+                showTo = self.results[1][i][1]
                 CoM = p.getLinkState(0, i+1)[0]
                 otherPoint = [CoM[0],CoM[1],CoM[2]+1]
-                p.addUserDebugLine(lineFromXYZ=CoM, lineToXYZ=otherPoint, lineColorRGB=[0, 0, 1], lineWidth=4,
-                                   lifeTime=0.5)
-            p.addUserDebugLine(lineFromXYZ=showFrom, lineToXYZ=showTo, lineColorRGB=[1, 1, 0], lineWidth=2,
-                               lifeTime=0.5)
+            #     p.addUserDebugLine(lineFromXYZ=CoM, lineToXYZ=otherPoint, lineColorRGB=[0, 0, 1], lineWidth=4,
+            #                        lifeTime=0.5)
+                p.addUserDebugLine(lineFromXYZ=showFrom, lineToXYZ=showTo, lineColorRGB=[1, 1, 0], lineWidth=2,
+                              lifeTime=0.5)
 
         return
 

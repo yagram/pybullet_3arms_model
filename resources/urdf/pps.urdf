@@ -24,12 +24,6 @@
   </link>
 
 	<link name="base">
-    <contact>
-      <lateral_friction value="1.0"/>
-      <rolling_friction value="0.0"/>
-      <contact_cfm value="1.0"/>
-      <contact_erp value="1.0"/>
-    </contact>
     <inertial>
       <origin rpy="0 0 0"  xyz="0.000000 0 0"/>
       <mass value="292.0"/>
@@ -53,13 +47,6 @@
   </link>
 
 	<link name="A1">
-    <contact>
-		<lateral_friction value="1.0"/>
-		<rolling_friction value = "101"/>
-		<contact_cfm value="0.0"/>
-		<contact_erp value="1.0"/>
-		<kd value ="1.0"/>
-	</contact>
     <inertial>
       <origin rpy="0 0 0" xyz="-0.55 0 0"/>
       <mass value="180"/>
@@ -81,14 +68,8 @@
       </geometry>
     </collision>
   </link>
+
 	<link name="A2">
-    <contact>
-      <lateral_friction value="1.0"/>
-      <rolling_friction value="0.0"/>
-      <contact_cfm value="0.0"/>
-      <contact_erp value="1.0"/>
-      <kd value ="1.0"/>
-    </contact>
     <inertial>
       <origin rpy="0 0 0" xyz="0 0 0"/>
       <mass value="299"/>
@@ -110,14 +91,8 @@
       </geometry>
     </collision>
   </link>
+
 	<link name="A3">
-    <contact>
-      <lateral_friction value="1.0"/>
-      <rolling_friction value="0.0"/>
-      <contact_cfm value="0.0"/>
-      <contact_erp value="1.0"/>
-      <kd value ="1.0"/>
-    </contact>
     <inertial>
       <origin rpy="0 0 0" xyz="0.31129999 0 0"/>
       <mass value="193.2"/>

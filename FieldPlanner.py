@@ -103,7 +103,7 @@ class FieldPlanner(threading.Thread):
             #self.print_rep_forces()
             #self.print_att_forces()
             self.proj_world_forces()
-            self.step_forward()
+            #self.step_forward()
             #self.write_QST(row)
             #self.print_joint_torques()
             #self.print_joint_torques(jointTorques)
@@ -117,11 +117,13 @@ class FieldPlanner(threading.Thread):
         return
 
     def update_arrays_att(self):
-        """Permet de récupérer les control points pour l'attraction vers le goal depuis collisionThread"""
+        """ Update of arrayAttLeoni[]
+        arrayAttLeoni[i]: CoM position of i-th link in world coordinates
+        Note: arrayAttObs is useless since it is static """
         self.clear_arrays_att() #On clear les listes
-        for i in range(1, p.getNumJoints(self.world.ppsId)): #On commence à 1 pour éviter la base
+        for i in range(1, p.getNumJoints(self.world.ppsId)): #Starting at 1 to skip the Base
             linkState = p.getLinkState(self.world.ppsId, linkIndex=i)
-            self.arrayAttLeoni.append(linkState[0]) #On sélectionne la position absolue du centre de masse du link
+            self.arrayAttLeoni.append(linkState[0]) #Selecting the CoM of link i
         for i in range(0, p.getNumJoints(self.world.myObstacle)):
             linkState = p.getLinkState(self.world.myObstacle, linkIndex=i)
             self.arrayAttObs.append(linkState[0])
@@ -129,20 +131,25 @@ class FieldPlanner(threading.Thread):
         return
 
     def update_arrays_rep(self):
-        """Permet de récupérer les control points pour l'esquive d'obstacle depuis collisionThread"""
+        """ Update arrayRepLeoni[][] and arrayRepObs[][] using information from collisionThread checking for collision.
+        For each link, the shortest distance is computed w.r.t. all obstacles and smallest value is kept for arrayRepLeoni.
+        Same is done the other way around for arrayRepObs.
+        arrayRepLeoni[i][0]: position of repulsive point on the i-th link (world coordinates)
+        arrayRepLeoni[i][1]: position of the corresponding point on the closest obstacle (world coordinates)
+        arrayRepLeoni[i][2]: distance of i-th link w.r.t. the closest obstacle
+        arrayRepLeoni[i][3]: name of the closest obstacle"""
         tempList = []
-        listCouples = self.collisionThread.listCouples
-        results = self.collisionThread.results
+        listCouples = self.collisionThread.listCouples #Array with pairs of relevant links for distance computation
+        results = self.collisionThread.results #Result from thread
         for i in range(0, len(listCouples)):
-            ind = listCouples[i][0][1]-1 #index permettant de se placer correctement dans l'arrayRepLeoni, -1
-            # pour la base
+            ind = listCouples[i][0][1]-1 #index for arrayRepLeoni, -1 for the Base
             myJointInfo = p.getJointInfo(self.world.myObstacle, listCouples[i][1][1])
             if results[2][i] < self.arrayRepLeoni[ind][2]:
                 self.arrayRepLeoni[ind][0] = np.asarray(results[1][i][0])
                 self.arrayRepLeoni[ind][1] = np.asarray(results[1][i][1])
                 self.arrayRepLeoni[ind][2] = results[2][i]
-                self.arrayRepLeoni[ind][3] = myJointInfo[12] #link name
-            ind = listCouples[i][1][1]
+                self.arrayRepLeoni[ind][3] = myJointInfo[12] #Obstacle name
+            ind = listCouples[i][1][1] #index for arrayRepObs
             myJointInfo = p.getJointInfo(self.world.ppsId, listCouples[i][0][1])
             if results[2][i] < self.arrayRepObs[ind][2]:
                 self.arrayRepObs[ind][0] = np.asarray(results[1][i][1]) #Inversion des vecteurs
@@ -198,20 +205,24 @@ class FieldPlanner(threading.Thread):
         return
 
     def update_joint_frame(self):
-        """Ici faut s'accrocher, en gros parentFramePos et ParentFrameOrn sont définis par rapport à la frame
-        inertielle du link précédent. C'est pour ça que j'utilise getlinkstate pour chopper la position/orientation
-        globale des frames intertielles pour chacun des links."""
-        self.jointFrames[0][0]=np.asarray(p.getJointInfo(self.world.ppsId,0)[14])
+        """ Update jointFrames[][] array:
+        jointFrames[i][0]: position of the i-th joint (in world coordinates).
+        jointFrames[i][1]: quaternion from world to i-th joint frame.
+        ."""
+        self.jointFrames[0][0]=np.asarray(p.getJointInfo(self.world.ppsId,0)[14]) #First joint is at parentFramePos
         self.jointFrames[0][1]=np.asarray(p.getJointInfo(self.world.ppsId,1)[15])
         for i in range(1, p.getNumJoints(self.world.ppsId)):
-            relJointPos=np.asarray(p.getJointInfo(self.world.ppsId,i)[14]) #Position relative par rapport à la frame inertielle (exprimé dans cette frame locale)
-            linkState=p.getLinkState(self.world.ppsId,i-1) #State du link précédent
-            frameToWorld=np.reshape(np.asarray(p.getMatrixFromQuaternion(p.invertTransform(linkState[0],linkState[1])[1])),(3,3)) #On choppe la matrice de passage vers le world
-            relJointPos=np.matmul(relJointPos,frameToWorld) #projection de la position sur le world
-            self.jointFrames[i][0]=np.asarray(linkState[0])+np.asarray(relJointPos)
-            self.jointFrames[i][1]=self.multiply_quaternions(np.asarray(p.getJointInfo(self.world.ppsId,i)[15]),np.asarray(p.getLinkState(self.world.ppsId,i-1)[1]))
-            localJointAxis=p.getJointInfo(self.world.ppsId,i)[13]
-            self.jointAxis[i-1]=np.matmul(np.asarray(localJointAxis),frameToWorld)
+            relJointPos=np.asarray(p.getJointInfo(self.world.ppsId,i)[14]) #jointPos relative to parentLink (in parentLink's frame)
+            linkState=p.getLinkState(self.world.ppsId,i-1)
+            frameToWorld=np.reshape(np.asarray(p.getMatrixFromQuaternion(p.invertTransform(linkState[0],linkState[1])[1])),(3,3))
+            #Computing the rotation matrix from child link frame to world.
+            relJointPos=np.matmul(relJointPos,frameToWorld) #jointPos relative to parentLink (in world coordinates)
+            self.jointFrames[i][0]=np.asarray(linkState[0])+np.asarray(relJointPos) #world jointPos
+            self.jointFrames[i][1]=self.multiply_quaternions(np.asarray(p.getJointInfo(self.world.ppsId,i)[15]),
+                                                             np.asarray(p.getLinkState(self.world.ppsId,i-1)[1]))
+            #joint quaternion = relative joint quaternion * child link quaternion
+            localJointAxis=p.getJointInfo(self.world.ppsId,i)[13] #jointAxis (in joint frame)
+            self.jointAxis[i-1]=np.matmul(np.asarray(localJointAxis),frameToWorld) #jointAxis (in world frame)
         return
 
     def update_jacobians(self):
