@@ -35,12 +35,12 @@ class FieldPlanner(threading.Thread):
         self.collisionThread = collisionThread
         self.movingJoints = self.get_moving_joints(self.world.ppsId)
         self.dofLeoni = self.get_dof(self.world.ppsId)
-        self.eta=1
-        self.zeta=[500,500,2750]
-        self.rho0=1.50
-        self.d=0.75
-        self.alpha0=0.001
-        self.alphai=0.01
+        self.eta = 0.1
+        self.zeta = [15, 15, 100]
+        self.rho0 = 0.11
+        self.d = 2
+        self.alpha0 = 0.001
+        self.alphai = 0.01
         self.posBlocage=0
         self.tour=0
         self.sign=1
@@ -63,29 +63,40 @@ class FieldPlanner(threading.Thread):
         self.arrayAttForces: List[ndarray] = []
         self.jointAxis=[[0 for i in range(3)] for i in range(3)]
         self.jointTorques= np.zeros(3)
-        self.workbook = xlsxwriter.Workbook('forces_on_A3_noObs.xlsx')
-        self.worksheet = self.workbook.add_worksheet()
-        self.workbookT =xlsxwriter.Workbook('applied_torquesNew.xlsx')
-        self.worksheetT= self.workbookT.add_worksheet()
-
-        """self.qFinal: List[ndarray] = [np.asarray([-0.42134,-2.30351,-1.103]),np.asarray([-0.9193,-2.7213,-0.743])
-            ,np.asarray([-1.203,-2.113,-0.473])] #Pour le goal (40,75,0)"""
-        self.qFinal: List[ndarray] = [np.asarray([0.00865, -2.4999, -1.103]), np.asarray([0.018875, -3.14985, -0.743])
-            , np.asarray([0.54876, -3.56, -0.473])]  # Pour le goal (90.947,-128.842,0)
+        self.goalReached=False
+        self.accuracy=0.00005
+        self.excelCspace = xlsxwriter.Workbook('data_memoire/traj_min_local.xlsx')
+        self.sheetExcelCspace = self.excelCspace.add_worksheet()
+        self.excelQST =xlsxwriter.Workbook('data_memoire/torques_obs_up.xlsx')
+        self.sheetExcelQST= self.excelQST.add_worksheet()
+        self.excelForces =xlsxwriter.Workbook('data_memoire/Allforces_obs_up.xlsx')
+        self.sheetExcelForces= self.excelForces.add_worksheet()
+        self.excelCoMInfo =xlsxwriter.Workbook('data_memoire/CoMInfo_obs_up_retest.xlsx')
+        self.sheetExcelCoMInfo= self.excelCoMInfo.add_worksheet()
+        self.qFinal=[]
+        # self.qFinal: List[ndarray] = [np.asarray([-0.42133958,-2.30351515,-0.95]),np.asarray([-0.94041358,-2.67598867,-0.62])
+        #      ,np.asarray([-1.20294045,-2.11287827,-0.62])] #Pour le goal (40,75,0)
+        self.qFinal: List[ndarray] = [np.asarray([0.044958921717760336, -2.498159370400595, -0.95]), np.asarray([0.14421056063219984, -3.1652997779121357, -0.6199999999999999])
+              , np.asarray([0.7172773896099363, -3.405316625444558, -0.6199999999999999])]  # Pour le goal (94.737,-117.474,0)
 
         return
 
     def run(self):
         # Le but de ce thread va être de calculer la séquence de position que doit effectuer nos objets
         time.sleep(1)  # On attends une petite seconde le temps que l'autre thread commence à run
-        #self.get_final_state()
+        #elf.get_final_state()
         row=0
+        #self.go_to_first_collision()
+        #self.write_Cspace(row)
         #self.write_QST(row)
-        #self.write_joint_pos(row)
+        #p.resetDebugVisualizerCamera(3, 0, 0,[0,-1.95,-1])
         #self.write_forces(row)
+        #self.write_CoMInfo(row)
         row +=1
+        substep=0
         #self.construct_C_space()
         while p.isConnected():
+            #print("trollu")
             #self.construct_C_space()
             self.update_arrays_att()
             #self.print_array_att_leoni()
@@ -94,20 +105,24 @@ class FieldPlanner(threading.Thread):
             self.get_rep_fields()
             #self.print_array_rep_leoni()
             self.update_jacobians()
-            #self.write_joint_pos(row)
             #self.print_array_jac_att()
             #self.print_array_jac_rep()
             self.get_world_rep_forces()
             self.get_world_att_forces()
-            #self.write_forces(row)
             #self.print_rep_forces()
             #self.print_att_forces()
             self.proj_world_forces()
-            #self.step_forward()
-            #self.write_QST(row)
+            self.step_forward()
+            if row//5 > substep:
+                substep +=1
+                #self.write_Cspace(substep)
+                #self.write_QST(substep)
+                #self.write_CoMInfo(substep)
+                #self.write_forces(substep)
             #self.print_joint_torques()
             #self.print_joint_torques(jointTorques)
             #self.print_joint_pos_deg()
+            self.check_accuracy()
             self.reinit_arrays_rep() #Réinitialisation de la distance
             self.clear_arrays_forces()
             row +=1
@@ -284,14 +299,27 @@ class FieldPlanner(threading.Thread):
         self.update_joint_pos(self.world.ppsId)
         nextPos=np.zeros(3)
         rho=np.linalg.norm(self.goal-self.jointPos,2)
-        #alpha=0.01
+        #alpha=0.001
         alpha=self.alpha0+(self.alphai-self.alpha0)/(np.linalg.norm(self.goal,2))*rho
-        for index in range(0,self.dofLeoni):
-            """ATTENTION, IL FAUT CHANGER le vecteur GOAL si jamais !"""
-            nextPos[index]= self.jointPos[index] + alpha*self.jointTorques[index]/normTorque
-            p.setJointMotorControl2(self.world.ppsId, index+1, p.POSITION_CONTROL, targetPosition=nextPos[index],
-                                    force=MAX_TORQUE,maxVelocity=MAX_SPEED)
+        if not self.goalReached:
+            for index in range(0,self.dofLeoni):
+                """ATTENTION, IL FAUT CHANGER le vecteur GOAL si jamais !"""
+                nextPos[index]= self.jointPos[index] + alpha*self.jointTorques[index]/normTorque
+                p.setJointMotorControl2(self.world.ppsId, index+1, p.POSITION_CONTROL, targetPosition=nextPos[index],
+                                        force=MAX_TORQUE,maxVelocity=MAX_SPEED)
         self.update_joint_pos(self.world.ppsId)
+        return
+
+    def check_accuracy(self):
+        dist1 = np.linalg.norm(self.arrayAttLeoni[0] - self.qFinal[0], 2)
+        dist2 = np.linalg.norm(self.arrayAttLeoni[1] - self.qFinal[1], 2)
+        dist3=np.linalg.norm(self.arrayAttLeoni[2] - self.qFinal[2],2)
+        if dist1<self.accuracy and dist2<self.accuracy and dist3<self.accuracy:
+            self.goalReached=True
+            self.alpha0=0.00001
+            self.alphai=0.00001
+        else:
+            self.goalReached=False
         return
 
     def get_moving_joints(self, indexBody):
@@ -441,10 +469,14 @@ class FieldPlanner(threading.Thread):
         return
 
     def go_to_first_collision(self):
-        p.resetJointState(self.world.ppsId, 2, targetValue=93 * 3.1415 / 180)
+        p.resetJointState(self.world.ppsId, 2, targetValue=98 * 3.1415 / 180)
         time.sleep(1)
         p.resetJointState(self.world.ppsId, 1, targetValue=-180*3.1415/180)
         time.sleep(5)
+        # p.resetJointState(self.world.ppsId, 2, targetValue=-30 * 3.1415 / 180)
+        # time.sleep(1)
+        # p.resetJointState(self.world.ppsId, 1, targetValue=0 * 3.1415 / 180)
+        # time.sleep(5)
         self.update_joint_pos(self.world.ppsId)
         self.vectorPos.append(np.asarray(self.jointPos))
         self.update_arrays_rep()
@@ -453,60 +485,67 @@ class FieldPlanner(threading.Thread):
         self.get_att_fields()
         return
 
-    def write_csv(self, row):
+    def write_Cspace(self,row):
         if not row:
             titles=['q1','q2','Uatt body1', 'Uatt body2','Uatt body3','Urep body1','Urep body2','Urep body3']
             for col in range(0,len(titles)):
-                self.worksheet.write(row,col,titles[col])
-        else:
-            csvData=[self.vectorPos[-1][0], self.vectorPos[-1][1], self.arrayAttFields[-1][0], self.arrayAttFields[-1][1],
-            self.arrayAttFields[-1][2], self.arrayRepFields[-1][0], self.arrayRepFields[-1][1],
-             self.arrayRepFields[-1][2]]
-            for i in range(0,len(csvData)):
-                self.worksheet.write(row, i, csvData[i])
-        return
-
-    def write_joint_pos(self,row):
-        if not row:
-            titles=['q1','q2','Uatt body1', 'Uatt body2','Uatt body3','Urep body1','Urep body2','Urep body3']
-            for col in range(0,len(titles)):
-                self.worksheet.write(row,col,titles[col])
+                self.sheetExcelCspace.write(row,col,titles[col])
         else:
             csvData=[self.jointPos[0], self.jointPos[1], self.arrayAttFields[-1][0], self.arrayAttFields[-1][1],
              self.arrayAttFields[-1][2], self.arrayRepFields[-1][0], self.arrayRepFields[-1][1],
              self.arrayRepFields[-1][2]]
             for i in range(0,len(csvData)):
-                self.worksheet.write(row, i, csvData[i])
+                self.sheetExcelCspace.write(row, i, csvData[i])
         return
 
     def write_forces(self,row):
         if not row:
-            titles=['Fatt3x','Fatt3y','Fatt3z','Frep3x','Frep3y','Frep3z']
+            titles=['Fatt1x','Fatt1y','Fatt1z','Fatt2x','Fatt2y','Fatt2z','Fatt3x','Fatt3y','Fatt3z','Frep1x','Frep1y','Frep1z',
+                    'Frep2x','Frep2y','Frep2z','Frep3x','Frep3y','Frep3z']
             for col in range(0,len(titles)):
-                self.worksheet.write(row,col,titles[col])
+                self.sheetExcelForces.write(row,col,titles[col])
         else:
-            csvData=[self.arrayAttForces[2][0],self.arrayAttForces[2][1],self.arrayAttForces[2][2],self.arrayRepForces[2][0]
-                     ,self.arrayRepForces[2][1],self.arrayRepForces[2][2]]
+            csvData=[self.arrayAttForces[0][0],self.arrayAttForces[0][1],self.arrayAttForces[0][2],
+                     self.arrayAttForces[1][0],self.arrayAttForces[1][1],self.arrayAttForces[1][2],
+                     self.arrayAttForces[2][0],self.arrayAttForces[2][1],self.arrayAttForces[2][2],
+                     self.arrayRepForces[0][0], self.arrayRepForces[0][1], self.arrayRepForces[0][2],
+                     self.arrayRepForces[1][0], self.arrayRepForces[1][1], self.arrayRepForces[1][2],
+                     self.arrayRepForces[2][0],self.arrayRepForces[2][1],self.arrayRepForces[2][2]]
             for i in range(0,len(csvData)):
-                self.worksheet.write(row, i, csvData[i])
+                self.sheetExcelForces.write(row, i, csvData[i])
         return
 
     def write_QST(self,row):
         if not row:
             titles=['q1','q2','q3','v1','v2','v3','T1','T2','T3']
             for col in range(0,len(titles)):
-                self.worksheetT.write(row,col,titles[col])
+                self.sheetExcelQST.write(row,col,titles[col])
         else:
             jState=p.getJointStates(self.world.ppsId,[1,2,3])
             csvData=[jState[0][0],jState[1][0],jState[2][0],
                      jState[0][1],jState[1][1],jState[2][1],jState[0][3],jState[1][3],jState[2][3]]
             for i in range(0, len(csvData)):
-                self.worksheetT.write(row, i, csvData[i])
+                self.sheetExcelQST.write(row, i, csvData[i])
+        return
+
+    def write_CoMInfo(self,row):
+        if not row:
+            titles=['A1x','A1y','A1z','A2x','A2y','A2z','A3x','A3y','A3z','vx','vy','vz']
+            for col in range(0,len(titles)):
+                self.sheetExcelCoMInfo.write(row,col,titles[col])
+        else:
+            velocities=p.getLinkState(self.world.ppsId,2,1)[6] #cartesian velocity of A3 CoM
+            csvData=[self.arrayAttLeoni[0][0],self.arrayAttLeoni[0][1],self.arrayAttLeoni[0][2],
+                     self.arrayAttLeoni[1][0], self.arrayAttLeoni[1][1], self.arrayAttLeoni[1][2],
+                    self.arrayAttLeoni[2][0],self.arrayAttLeoni[2][1],self.arrayAttLeoni[2][2],
+                     velocities[0],velocities[1],velocities[2]]
+            for i in range(0, len(csvData)):
+                self.sheetExcelCoMInfo.write(row, i, csvData[i])
         return
 
     def construct_C_space(self):
         row=0
-        self.write_csv(row)
+        self.write_Cspace(row)
         row +=1
         self.go_to_first_collision()
         while(self.jointPos[0]<160*3.1415/180):
@@ -517,7 +556,7 @@ class FieldPlanner(threading.Thread):
             self.append_vector_pos()
             self.get_att_fields()
             self.get_rep_fields()
-            self.write_csv(row)
+            self.write_Cspace(row)
             self.go_to_next()
             self.reinit_arrays_rep()
             row +=1
