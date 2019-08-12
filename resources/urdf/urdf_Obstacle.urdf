@@ -26,7 +26,7 @@
 
 
   <joint name="joint_iso_to_obstacle" type="fixed">
-    <origin rpy="0 0 0" xyz="1 -3 0.10"/>
+    <origin rpy="0 0 0" xyz="1 -10 0.10"/>
     <parent link="isocenter"/>
     <child link ="Obstacle"/>
   </joint>

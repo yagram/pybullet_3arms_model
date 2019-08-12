@@ -16,8 +16,13 @@ import xlsxwriter
 
 def __exit(fieldPlanner: FieldPlanner)-> None: #NE PAS mettre de return lorqu'on met "None"
     print("Program is about to close")
-    #fieldPlanner.workbook.close()
-    fieldPlanner.workbookT.close()
+    fieldPlanner.excelCspace.close()
+    print("Cspace: ok")
+    # fieldPlanner.excelForces.close()
+    # print("Forces: ok")
+    # fieldPlanner.excelQST.close()
+    # print("QST: ok")
+    # fieldPlanner.excelCoMInfo.close()
     sys.exit()
 
 

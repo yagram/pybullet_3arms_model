@@ -10,6 +10,7 @@ import math
 from typing import List
 import sys
 import xlsxwriter
+from pytictoc import TicToc
 import utils_collision
 import register
 logging.basicConfig(level=logging.DEBUG)
@@ -35,12 +36,12 @@ class FieldPlanner(threading.Thread):
         self.collisionThread = collisionThread
         self.movingJoints = self.get_moving_joints(self.world.ppsId)
         self.dofLeoni = self.get_dof(self.world.ppsId)
-        self.eta=1
-        self.zeta=[1000,1000,1000,1000,2000,2000,2000]
-        self.rho0=1.5
-        self.d=0.75
+        self.eta=0.1
+        self.zeta=[15,15,15,15,15,15,100]
+        self.rho0=0.11
+        self.d=2
+        self.alphat = 0.0001
         self.alphai=0.01
-        self.alpha0=0.0001
         self.posBlocage=0
         self.tour=0
         self.sign=1
@@ -51,7 +52,6 @@ class FieldPlanner(threading.Thread):
         self.arrayRepLeoni = [basisList[:] for i in range(p.getNumJoints(self.world.ppsId)-1)] # Il est nécessaire d'initialiser la liste
         self.arrayRepObs = [basisList[:] for i in range(p.getNumJoints(self.world.myObstacle))]
         emptyJac = [[0 for i in range(self.dofLeoni)] for y in range(3)]
-        emptyForce = [0 for i in range(self.dofLeoni)]
         self.arrayJacAtt = [emptyJac[:] for i in range(p.getNumJoints(self.world.ppsId)-1)]
         self.arrayJacRep = [emptyJac[:] for i in range(p.getNumJoints(self.world.ppsId)-1)]
         self.jointPos = [0 for i in range(0, self.dofLeoni)]
@@ -61,17 +61,20 @@ class FieldPlanner(threading.Thread):
         self.vectorPos: List[ndarray] = []
         self.arrayRepForces: List[ndarray] = []
         self.arrayAttForces: List[ndarray] = []
-        self.jointAxis=[[0 for i in range(3)] for i in range(p.getNumJoints(self.world.ppsId))]
+        self.jointAxis = [[0 for i in range(3)] for i in range(p.getNumJoints(self.world.ppsId))]
         self.jointTorques= np.zeros(3)
-        self.workbook = xlsxwriter.Workbook('forces_on_A3_noObs.xlsx')
-        self.worksheet = self.workbook.add_worksheet()
-        self.workbookT =xlsxwriter.Workbook('collect_jacobians_randomConfigNew.xlsx')
-        self.worksheetT= self.workbookT.add_worksheet()
+        self.goalReached = False
+        self.accuracy = 0.00005
+        self.excelCspace = xlsxwriter.Workbook('data_memoire6dofs/traj_min_local.xlsx')
+        self.sheetExcelCspace = self.excelCspace.add_worksheet()
+        self.excelQST = xlsxwriter.Workbook('data_memoire6dofs/torques_obs_up.xlsx')
+        self.sheetExcelQST = self.excelQST.add_worksheet()
+        self.excelForces = xlsxwriter.Workbook('data_memoire6dofs/Allforces_obs_up.xlsx')
+        self.sheetExcelForces = self.excelForces.add_worksheet()
+        self.excelCoMInfo = xlsxwriter.Workbook('data_memoire6dofs/CoMInfo_obs_up_retest.xlsx')
+        self.sheetExcelCoMInfo = self.excelCoMInfo.add_worksheet()
+        self.excelJacobians=xlsxwriter.Workbook('data_memoire6dofs/collect_jacobians.xlsx')
         self.localTCP=np.asarray([1.36,0,1.25]) #position du TCP par rapport au dernier joint (coordonnées locales)
-        self.dampingPitchRoll=0.1 #Rajout d'un damping sur les joints
-        self.weightForTorques=np.asarray([[1,0,0,0,0,0],[0,1,0,0,0,0],[0,0,self.dampingPitchRoll,0,0,0],[0,0,0,self.dampingPitchRoll,0,0],
-                                          [0,0,0,0,self.dampingPitchRoll,0],[0,0,0,0,0,1]]).reshape(self.dofLeoni,self.dofLeoni)
-
         self.qFinal: List[ndarray] = self.qFinal_TCP_Iso()
         return
 
@@ -83,15 +86,16 @@ class FieldPlanner(threading.Thread):
         while p.isConnected():
             self.update_arrays_att()
             self.update_arrays_rep()
-            #self.show_joint()
-            #self.show_array_att_Leoni()
+            # self.show_joint()
+            # self.show_array_att_Leoni()
+            #self.show_array_rep_Leoni()
             # # #self.get_att_fields()
             # # #self.get_rep_fields()
             self.update_jacobians()
             self.get_world_rep_forces()
             self.get_world_att_forces()
             self.proj_world_forces()
-            self.step_forward()
+            #self.step_forward()
             self.reinit_arrays_rep() #Réinitialisation de la distance
             self.clear_arrays_forces()
             row +=1
@@ -119,7 +123,6 @@ class FieldPlanner(threading.Thread):
 
     def update_arrays_rep(self):
         """Permet de récupérer les control points pour l'esquive d'obstacle depuis collisionThread"""
-        tempList = []
         listCouples = self.collisionThread.listCouples
         results = self.collisionThread.results
         for i in range(0, len(listCouples)):
@@ -138,7 +141,6 @@ class FieldPlanner(threading.Thread):
                 self.arrayRepObs[ind][1] = np.asarray(results[1][i][0])
                 self.arrayRepObs[ind][2] = results[2][i]
                 self.arrayRepObs[ind][3] = myJointInfo[12]  # link name
-            #print("Point on couch: " + str(self.arrayRepLeoni[6][2]))
         return
 
     def reinit_arrays_rep(self):
@@ -186,7 +188,6 @@ class FieldPlanner(threading.Thread):
         """
         for joint in range(0, self.dofLeoni):
             self.jointPos[joint] = p.getJointState(indexBody, joint+1)[0] #+1 pour éviter la base
-
         return
 
     def update_joint_frame(self):
@@ -257,15 +258,6 @@ class FieldPlanner(threading.Thread):
         for i in range(0, len(self.arrayRepForces)):
             projForce = np.matmul(np.asarray(self.arrayRepForces[i]), np.asarray(self.arrayJacRep[i]))
             self.jointTorques += projForce
-        self.torque_weighting() #weight pour le pitch/roll
-        return
-
-    def torque_weighting(self):
-        newTorques=np.matmul(self.jointTorques,self.weightForTorques)
-        myNorm=np.linalg.norm(newTorques,2)
-        if myNorm > 0.00001:
-            newTorques=newTorques/myNorm
-            self.jointTorques=newTorques*np.linalg.norm(self.jointTorques)
         return
 
     def step_forward(self):
@@ -278,9 +270,8 @@ class FieldPlanner(threading.Thread):
         #alpha=0.01
         for index in range(0,self.dofLeoni):
             """ATTENTION, IL FAUT CHANGER le vecteur GOAL si jamais !"""
-            alpha = self.alpha0 + (self.alphai - self.alpha0) / (np.linalg.norm(self.goal, 2)) * rho
+            alpha = self.alphat + (self.alphai - self.alphat) / (np.linalg.norm(self.goal, 2)) * rho
             if normTorque > 0.00001:
-                #nextPos[index] = self.jointPos[index] + alpha *(self.goal[index]-self.jointPos[index])
                 nextPos[index] = self.jointPos[index] + alpha * self.jointTorques[index] / normTorque
             else:
                 nextPos[index] = self.jointPos[index] + alpha * (self.goal[index] - self.jointPos[index])
@@ -330,6 +321,188 @@ class FieldPlanner(threading.Thread):
         qFinal.append(np.asarray([0, -1.1699447650397679, -0.21050000000000002]))
         qFinal.append(np.asarray([0,0,0]))
         return qFinal
+
+    # ---------------------------  Création du C-space -------------------------------------#
+
+    def get_rep_fields(self):
+        fields = []
+        for i in range(0, len(self.arrayRepLeoni)):
+            dist = self.arrayRepLeoni[i][2]
+            dist = max(dist, 0.001)  #Distance inférieure au mm
+            if dist <= self.rho0:
+                fields.append(0.5 * math.pow((1 / dist) - 1 / self.rho0, 2))
+            else:
+                fields.append(0)
+        self.arrayRepFields.append(np.asarray(fields))
+        return
+
+    def get_att_fields(self):
+        fields = []
+        for i in range(0, len(self.arrayAttLeoni)):
+            vec = self.arrayAttLeoni[i] - self.qFinal[i]
+            dist = np.linalg.norm(vec, 2)
+            if dist <= self.d:
+                fields.append(0.5 * self.zeta[i] * math.pow(dist, 2))
+            else:
+                fields.append(self.d * self.zeta[i] * dist - 0.5 * self.zeta[i] * math.pow(self.d, 2))
+        self.arrayAttFields.append(np.asarray(fields))
+        return
+
+    def go_to_next(self):
+        for i in range(0, self.dofLeoni - 1):
+            p.setJointMotorControl2(self.world.ppsId, i + 1, p.POSITION_CONTROL, targetPosition=self.vectorPos[-1][i])
+            time.sleep(0.002)
+            if self.collision:
+                time.sleep(0.01)
+        self.update_joint_pos(self.world.ppsId)
+        return
+
+    def append_vector_pos(self):
+        tempCollision=self.collision
+        if self.arrayRepObs[0][2]<0.0001:
+            self.collision=True
+        else:
+            self.collision=False
+        #print("Collision: " + str(self.collision))
+        #logging.info("Temp Collision: " + str(tempCollision))
+        #print("Signe: " + str(self.sign))
+        if self.collision and not tempCollision: #detect a transition from true to false
+            self.sign= -self.sign
+            newPos = np.asarray([self.vectorPos[-1][0]+1*3.1415/180,self.vectorPos[-1][1]+self.sign*2*3.1415/180])
+            self.posBlocage =self.vectorPos[-1][1]
+            self.vectorPos.append(newPos)
+            self.tour=0
+        elif np.linalg.norm(self.vectorPos[-1][1]-self.posBlocage) >= 6.283*self.tour:
+            newPos = np.asarray([self.vectorPos[-1][0]+1*3.1415/180,self.vectorPos[-1][1]+self.sign*1*3.1415/180])
+            self.vectorPos.append(newPos)
+            self.tour += 1
+        else:
+            newPos = np.asarray([self.vectorPos[-1][0], self.vectorPos[-1][1] + self.sign * 1* 3.1415 / 180])
+            self.vectorPos.append(newPos)
+        return
+
+    def go_to_first_collision(self):
+        p.resetJointState(self.world.ppsId, 2, targetValue=93 * 3.1415 / 180)
+        time.sleep(1)
+        p.resetJointState(self.world.ppsId, 1, targetValue=-180*3.1415/180)
+        time.sleep(5)
+        self.update_joint_pos(self.world.ppsId)
+        self.vectorPos.append(np.asarray(self.jointPos))
+        self.update_arrays_rep()
+        self.update_arrays_att()
+        self.get_rep_fields()
+        self.get_att_fields()
+        return
+
+    def write_Cspace(self, row):
+        if not row:
+            titles = ['q1', 'q2', 'Uatt body1', 'Uatt body2', 'Uatt body3', 'Urep body1', 'Urep body2', 'Urep body3']
+            for col in range(0, len(titles)):
+                self.sheetExcelCspace.write(row, col, titles[col])
+        else:
+            csvData = [self.jointPos[0], self.jointPos[1], self.arrayAttFields[-1][0], self.arrayAttFields[-1][1],
+                       self.arrayAttFields[-1][2], self.arrayRepFields[-1][0], self.arrayRepFields[-1][1],
+                       self.arrayRepFields[-1][2]]
+            for i in range(0, len(csvData)):
+                self.sheetExcelCspace.write(row, i, csvData[i])
+        return
+
+    def write_forces(self,row):
+        if not row:
+            titles=['Fatt1x','Fatt1y','Fatt1z','Fatt2x','Fatt2y','Fatt2z','Fatt3x','Fatt3y','Fatt3z','Frep1x','Frep1y','Frep1z',
+                    'Frep2x','Frep2y','Frep2z','Frep3x','Frep3y','Frep3z']
+            for col in range(0,len(titles)):
+                self.sheetExcelForces.write(row,col,titles[col])
+        else:
+            csvData=[self.arrayAttForces[0][0],self.arrayAttForces[0][1],self.arrayAttForces[0][2],
+                     self.arrayAttForces[1][0],self.arrayAttForces[1][1],self.arrayAttForces[1][2],
+                     self.arrayAttForces[2][0],self.arrayAttForces[2][1],self.arrayAttForces[2][2],
+                     self.arrayRepForces[0][0], self.arrayRepForces[0][1], self.arrayRepForces[0][2],
+                     self.arrayRepForces[1][0], self.arrayRepForces[1][1], self.arrayRepForces[1][2],
+                     self.arrayRepForces[2][0],self.arrayRepForces[2][1],self.arrayRepForces[2][2]]
+            for i in range(0,len(csvData)):
+                self.sheetExcelForces.write(row, i, csvData[i])
+        return
+
+    def write_QST(self,row):
+        if not row:
+            titles=['q1','q2','q3','v1','v2','v3','T1','T2','T3']
+            for col in range(0,len(titles)):
+                self.sheetExcelQST.write(row,col,titles[col])
+        else:
+            jState=p.getJointStates(self.world.ppsId,[1,2,3])
+            csvData=[jState[0][0],jState[1][0],jState[2][0],
+                     jState[0][1],jState[1][1],jState[2][1],jState[0][3],jState[1][3],jState[2][3]]
+            for i in range(0, len(csvData)):
+                self.sheetExcelQST.write(row, i, csvData[i])
+        return
+
+    def write_CoMInfo(self, row):
+        if not row:
+            titles = ['A1x', 'A1y', 'A1z', 'A2x', 'A2y', 'A2z', 'A3x', 'A3y', 'A3z', 'vx', 'vy', 'vz']
+            for col in range(0, len(titles)):
+                self.sheetExcelCoMInfo.write(row, col, titles[col])
+        else:
+            velocities = p.getLinkState(self.world.ppsId, 2, 1)[6]  # cartesian velocity of A3 CoM
+            csvData = [self.arrayAttLeoni[0][0], self.arrayAttLeoni[0][1], self.arrayAttLeoni[0][2],
+                       self.arrayAttLeoni[1][0], self.arrayAttLeoni[1][1], self.arrayAttLeoni[1][2],
+                       self.arrayAttLeoni[2][0], self.arrayAttLeoni[2][1], self.arrayAttLeoni[2][2],
+                       velocities[0], velocities[1], velocities[2]]
+            for i in range(0, len(csvData)):
+                self.sheetExcelCoMInfo.write(row, i, csvData[i])
+        return
+
+    def write_jacobians(self):
+        line=0
+        separation=['Jatt1','Jatt2','Jatt3','Jatt4','Jatt5','Jatt6','Jatt7','Jrep1','Jrep2','Jrep3','Jrep4','Jrep5','Jrep6','Jrep7']
+        for jac in range(len(self.arrayJacAtt)):
+            csvData=[separation[jac]]
+            self.worksheetT.write(line, 0, csvData[0])
+            print("My current Jacobian: " + str(csvData))
+            line += 1
+            currentJac=self.arrayJacAtt[jac]
+            for row in range(3):
+                csvData=[currentJac[row][0],currentJac[row][1],currentJac[row][2],currentJac[row][3]
+                        ,currentJac[row][4],currentJac[row][5]]
+                print("My row in jacobian: " + str(csvData))
+                for col in range(len(csvData)):
+                    self.worksheetT.write(line, col, csvData[col])
+                line +=1
+        for jac in range(len(self.arrayJacRep)):
+            csvData = [separation[jac+len(self.arrayJacAtt)]]
+            self.worksheetT.write(line, 0, csvData[0])
+            print("My current Jacobian: " + str(csvData))
+            line += 1
+            currentJac = self.arrayJacRep[jac]
+            for row in range(3):
+                csvData = [currentJac[row][0], currentJac[row][1], currentJac[row][2], currentJac[row][3]
+                    , currentJac[row][4], currentJac[row][5]]
+                print("My row in jacobian: " + str(csvData))
+                for col in range(len(csvData)):
+                    self.worksheetT.write(line, col, csvData[col])
+                line += 1
+        return
+
+    def construct_C_space(self):
+        row = 0
+        self.write_Cspace(row)
+        row += 1
+        self.go_to_first_collision()
+        while (self.jointPos[0] < 160 * 3.1415 / 180):
+            self.update_arrays_att()
+            # self.print_array_att_leoni()
+            self.update_arrays_rep()
+            # self.print_array_rep_leoni()
+            self.append_vector_pos()
+            self.get_att_fields()
+            self.get_rep_fields()
+            self.write_Cspace(row)
+            self.go_to_next()
+            self.reinit_arrays_rep()
+            row += 1
+            time.sleep(0.001)
+            # self.print_joint_pos_deg()
+        return
 
     # -------------------------------------- PRINTERS --------------------------------------------------- #
     def print_array_rep_leoni(self):
@@ -416,180 +589,4 @@ class FieldPlanner(threading.Thread):
             if self.arrayRepLeoni[i][2]!=100:
                 my_line=p.addUserDebugLine(lineFromXYZ=self.arrayRepLeoni[i][0], lineToXYZ=self.arrayRepLeoni[i][1], lineColorRGB=[1, 1, 0], lineWidth=2,
                                lifeTime=1)
-        return
-    # ---------------------------  Création du C-space -------------------------------------#
-
-    def get_rep_fields(self):
-        fields = []
-        for i in range(0, len(self.arrayRepLeoni)):
-            dist = self.arrayRepLeoni[i][2]
-            dist = max(dist, 0.001)  #Distance inférieure au mm
-            if dist <= self.rho0:
-                fields.append(0.5 * math.pow((1 / dist) - 1 / self.rho0, 2))
-            else:
-                fields.append(0)
-        self.arrayRepFields.append(np.asarray(fields))
-        return
-
-    def get_att_fields(self):
-        fields = []
-        for i in range(0, len(self.arrayAttLeoni)):
-            vec = self.arrayAttLeoni[i] - self.qFinal[i]
-            dist = np.linalg.norm(vec, 2)
-            if dist <= self.d:
-                fields.append(0.5 * self.zeta[i] * math.pow(dist, 2))
-            else:
-                fields.append(self.d * self.zeta[i] * dist - 0.5 * self.zeta[i] * math.pow(self.d, 2))
-        self.arrayAttFields.append(np.asarray(fields))
-        return
-
-    def go_to_next(self):
-        for i in range(0, self.dofLeoni - 1):
-            p.setJointMotorControl2(self.world.ppsId, i + 1, p.POSITION_CONTROL, targetPosition=self.vectorPos[-1][i])
-            #p.resetJointState(self.world.ppsId, i + 1, targetValue=self.vectorPos[-1][i])
-            time.sleep(0.002)
-            if self.collision:
-                time.sleep(0.01)
-        self.update_joint_pos(self.world.ppsId)
-        return
-
-    def append_vector_pos(self):
-        tempCollision=self.collision
-        if self.arrayRepObs[0][2]<0.0001:
-            self.collision=True
-        else:
-            self.collision=False
-        #print("Collision: " + str(self.collision))
-        #logging.info("Temp Collision: " + str(tempCollision))
-        #print("Signe: " + str(self.sign))
-        if self.collision and not tempCollision: #detect a transition from true to false
-            self.sign= -self.sign
-            newPos = np.asarray([self.vectorPos[-1][0]+1*3.1415/180,self.vectorPos[-1][1]+self.sign*2*3.1415/180])
-            self.posBlocage =self.vectorPos[-1][1]
-            self.vectorPos.append(newPos)
-            self.tour=0
-        elif np.linalg.norm(self.vectorPos[-1][1]-self.posBlocage) >= 6.283*self.tour:
-            newPos = np.asarray([self.vectorPos[-1][0]+1*3.1415/180,self.vectorPos[-1][1]+self.sign*1*3.1415/180])
-            self.vectorPos.append(newPos)
-            self.tour += 1
-        else:
-            newPos = np.asarray([self.vectorPos[-1][0], self.vectorPos[-1][1] + self.sign * 1* 3.1415 / 180])
-            self.vectorPos.append(newPos)
-        return
-
-    def go_to_first_collision(self):
-        p.resetJointState(self.world.ppsId, 2, targetValue=93 * 3.1415 / 180)
-        time.sleep(1)
-        p.resetJointState(self.world.ppsId, 1, targetValue=-180*3.1415/180)
-        time.sleep(5)
-        self.update_joint_pos(self.world.ppsId)
-        self.vectorPos.append(np.asarray(self.jointPos))
-        self.update_arrays_rep()
-        self.update_arrays_att()
-        self.get_rep_fields()
-        self.get_att_fields()
-        return
-
-    def write_csv(self, row):
-        if not row:
-            titles=['q1','q2','Uatt body1', 'Uatt body2','Uatt body3','Urep body1','Urep body2','Urep body3']
-            for col in range(0,len(titles)):
-                self.worksheet.write(row,col,titles[col])
-        else:
-            csvData=[self.vectorPos[-1][0], self.vectorPos[-1][1], self.arrayAttFields[-1][0], self.arrayAttFields[-1][1],
-            self.arrayAttFields[-1][2], self.arrayRepFields[-1][0], self.arrayRepFields[-1][1],
-             self.arrayRepFields[-1][2]]
-            for i in range(0,len(csvData)):
-                self.worksheet.write(row, i, csvData[i])
-        return
-
-    def write_joint_pos(self,row):
-        if not row:
-            titles=['q1','q2','Uatt body1', 'Uatt body2','Uatt body3','Urep body1','Urep body2','Urep body3']
-            for col in range(0,len(titles)):
-                self.worksheet.write(row,col,titles[col])
-        else:
-            csvData=[self.jointPos[0], self.jointPos[1], self.arrayAttFields[-1][0], self.arrayAttFields[-1][1],
-             self.arrayAttFields[-1][2], self.arrayRepFields[-1][0], self.arrayRepFields[-1][1],
-             self.arrayRepFields[-1][2]]
-            for i in range(0,len(csvData)):
-                self.worksheet.write(row, i, csvData[i])
-        return
-
-    def write_forces(self,row):
-        if not row:
-            titles=['Fatt3x','Fatt3y','Fatt3z','Frep3x','Frep3y','Frep3z']
-            for col in range(0,len(titles)):
-                self.worksheet.write(row,col,titles[col])
-        else:
-            csvData=[self.arrayAttForces[2][0],self.arrayAttForces[2][1],self.arrayAttForces[2][2],self.arrayRepForces[2][0]
-                     ,self.arrayRepForces[2][1],self.arrayRepForces[2][2]]
-            for i in range(0,len(csvData)):
-                self.worksheet.write(row, i, csvData[i])
-        return
-
-    def write_QST(self,row):
-        if not row:
-            titles=['q1','q2','q3','v1','v2','v3','T1','T2','T3']
-            for col in range(0,len(titles)):
-                self.worksheetT.write(row,col,titles[col])
-        else:
-            jState=p.getJointStates(self.world.ppsId,[1,2,3])
-            csvData=[jState[0][0],jState[1][0],jState[2][0],
-                     jState[0][1],jState[1][1],jState[2][1],jState[0][3],jState[1][3],jState[2][3]]
-            for i in range(0, len(csvData)):
-                self.worksheetT.write(row, i, csvData[i])
-        return
-
-    def write_jacobians(self):
-        line=0
-        separation=['Jatt1','Jatt2','Jatt3','Jatt4','Jatt5','Jatt6','Jatt7','Jrep1','Jrep2','Jrep3','Jrep4','Jrep5','Jrep6','Jrep7']
-        for jac in range(len(self.arrayJacAtt)):
-            csvData=[separation[jac]]
-            self.worksheetT.write(line, 0, csvData[0])
-            print("My current Jacobian: " + str(csvData))
-            line += 1
-            currentJac=self.arrayJacAtt[jac]
-            for row in range(3):
-                csvData=[currentJac[row][0],currentJac[row][1],currentJac[row][2],currentJac[row][3]
-                        ,currentJac[row][4],currentJac[row][5]]
-                print("My row in jacobian: " + str(csvData))
-                for col in range(len(csvData)):
-                    self.worksheetT.write(line, col, csvData[col])
-                line +=1
-        for jac in range(len(self.arrayJacRep)):
-            csvData = [separation[jac+len(self.arrayJacAtt)]]
-            self.worksheetT.write(line, 0, csvData[0])
-            print("My current Jacobian: " + str(csvData))
-            line += 1
-            currentJac = self.arrayJacRep[jac]
-            for row in range(3):
-                csvData = [currentJac[row][0], currentJac[row][1], currentJac[row][2], currentJac[row][3]
-                    , currentJac[row][4], currentJac[row][5]]
-                print("My row in jacobian: " + str(csvData))
-                for col in range(len(csvData)):
-                    self.worksheetT.write(line, col, csvData[col])
-                line += 1
-        return
-        
-    def construct_C_space(self):
-        row=0
-        self.write_csv(row)
-        row +=1
-        self.go_to_first_collision()
-        while(self.jointPos[0]<160*3.1415/180):
-            self.update_arrays_att()
-            #self.print_array_att_leoni()
-            self.update_arrays_rep()
-            #self.print_array_rep_leoni()
-            self.append_vector_pos()
-            self.get_att_fields()
-            self.get_rep_fields()
-            self.write_csv(row)
-            self.go_to_next()
-            self.reinit_arrays_rep()
-            row +=1
-            time.sleep(0.001)
-            #self.print_joint_pos_deg()
-
         return
