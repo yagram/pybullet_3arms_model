@@ -40,7 +40,7 @@ class FieldPlanner(threading.Thread):
         self.zeta = [15, 15, 100]
         self.rho0 = 0.11
         self.d = 2
-        self.alphat = 0.0001
+        self.alphat = 0.001
         self.alphai = 0.01
         self.posBlocage=0
         self.tour=0
@@ -301,13 +301,11 @@ class FieldPlanner(threading.Thread):
         self.update_joint_pos(self.world.ppsId)
         nextPos=np.zeros(3)
         rho=np.linalg.norm(self.goal-self.jointPos,2)
-        #alpha=0.001
         alpha=self.alphat+(self.alphai-self.alphat)/(np.linalg.norm(self.goal,2))*rho
         if not self.goalReached:
             for index in range(0,self.dofLeoni):
                 """ATTENTION, IL FAUT CHANGER le vecteur GOAL si jamais !"""
-                nextPos[index] = self.jointPos[index] + alpha * self.jointTorques[index]
-                #nextPos[index]= self.jointPos[index] + alpha*self.jointTorques[index]/normTorque
+                nextPos[index]= self.jointPos[index] + alpha*self.jointTorques[index]/normTorque
                 p.setJointMotorControl2(self.world.ppsId, index+1, p.POSITION_CONTROL, targetPosition=nextPos[index],
                                         force=MAX_TORQUE,maxVelocity=MAX_SPEED)
         self.update_joint_pos(self.world.ppsId)
