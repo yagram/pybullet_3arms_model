@@ -10,6 +10,7 @@ import math
 from typing import List
 import sys
 import xlsxwriter
+from pytictoc import TicToc
 import utils_collision
 import register
 logging.basicConfig(level=logging.DEBUG)
@@ -39,7 +40,7 @@ class FieldPlanner(threading.Thread):
         self.zeta = [15, 15, 100]
         self.rho0 = 0.11
         self.d = 2
-        self.alpha0 = 0.001
+        self.alphat = 0.0001
         self.alphai = 0.01
         self.posBlocage=0
         self.tour=0
@@ -51,7 +52,6 @@ class FieldPlanner(threading.Thread):
         self.arrayRepLeoni = [basisList[:] for i in range(p.getNumJoints(self.world.ppsId)-1)] # Il est nécessaire d'initialiser la liste
         self.arrayRepObs = [basisList[:] for i in range(p.getNumJoints(self.world.myObstacle))]
         emptyJac = [[0 for i in range(self.dofLeoni)] for y in range(3)]
-        emptyForce = [0 for i in range(self.dofLeoni)]
         self.arrayJacAtt = [emptyJac[:] for i in range(self.dofLeoni)]
         self.arrayJacRep = [emptyJac[:] for i in range(self.dofLeoni)]
         self.jointPos = [0 for i in range(0, self.dofLeoni)]
@@ -65,6 +65,7 @@ class FieldPlanner(threading.Thread):
         self.jointTorques= np.zeros(3)
         self.goalReached=False
         self.accuracy=0.00005
+        self.myPositioningTime=TicToc()
         self.excelCspace = xlsxwriter.Workbook('data_memoire/traj_min_local.xlsx')
         self.sheetExcelCspace = self.excelCspace.add_worksheet()
         self.excelQST =xlsxwriter.Workbook('data_memoire/torques_obs_up.xlsx')
@@ -95,14 +96,15 @@ class FieldPlanner(threading.Thread):
         row +=1
         substep=0
         #self.construct_C_space()
+        self.myPositioningTime.tic()
         while p.isConnected():
             #print("trollu")
             #self.construct_C_space()
             self.update_arrays_att()
             #self.print_array_att_leoni()
             self.update_arrays_rep()
-            self.get_att_fields()
-            self.get_rep_fields()
+            # self.get_att_fields()
+            # self.get_rep_fields()
             #self.print_array_rep_leoni()
             self.update_jacobians()
             #self.print_array_jac_att()
@@ -113,15 +115,15 @@ class FieldPlanner(threading.Thread):
             #self.print_att_forces()
             self.proj_world_forces()
             self.step_forward()
-            if row//5 > substep:
-                substep +=1
-                #self.write_Cspace(substep)
-                #self.write_QST(substep)
-                #self.write_CoMInfo(substep)
-                #self.write_forces(substep)
-            #self.print_joint_torques()
-            #self.print_joint_torques(jointTorques)
-            #self.print_joint_pos_deg()
+            # if row//5 > substep:
+            #     substep +=1
+            #     self.write_Cspace(substep)
+            #     self.write_QST(substep)
+            #     self.write_CoMInfo(substep)
+            #     self.write_forces(substep)
+            # self.print_joint_torques()
+            # self.print_joint_torques(jointTorques)
+            # self.print_joint_pos_deg()
             self.check_accuracy()
             self.reinit_arrays_rep() #Réinitialisation de la distance
             self.clear_arrays_forces()
@@ -300,11 +302,12 @@ class FieldPlanner(threading.Thread):
         nextPos=np.zeros(3)
         rho=np.linalg.norm(self.goal-self.jointPos,2)
         #alpha=0.001
-        alpha=self.alpha0+(self.alphai-self.alpha0)/(np.linalg.norm(self.goal,2))*rho
+        alpha=self.alphat+(self.alphai-self.alphat)/(np.linalg.norm(self.goal,2))*rho
         if not self.goalReached:
             for index in range(0,self.dofLeoni):
                 """ATTENTION, IL FAUT CHANGER le vecteur GOAL si jamais !"""
-                nextPos[index]= self.jointPos[index] + alpha*self.jointTorques[index]/normTorque
+                nextPos[index] = self.jointPos[index] + alpha * self.jointTorques[index]
+                #nextPos[index]= self.jointPos[index] + alpha*self.jointTorques[index]/normTorque
                 p.setJointMotorControl2(self.world.ppsId, index+1, p.POSITION_CONTROL, targetPosition=nextPos[index],
                                         force=MAX_TORQUE,maxVelocity=MAX_SPEED)
         self.update_joint_pos(self.world.ppsId)
@@ -314,10 +317,13 @@ class FieldPlanner(threading.Thread):
         dist1 = np.linalg.norm(self.arrayAttLeoni[0] - self.qFinal[0], 2)
         dist2 = np.linalg.norm(self.arrayAttLeoni[1] - self.qFinal[1], 2)
         dist3=np.linalg.norm(self.arrayAttLeoni[2] - self.qFinal[2],2)
+        triggerReached=self.goalReached
         if dist1<self.accuracy and dist2<self.accuracy and dist3<self.accuracy:
             self.goalReached=True
-            self.alpha0=0.00001
+            self.alphat=0.00001
             self.alphai=0.00001
+            if not triggerReached:
+                self.stop_timer() #Stop the timer when the appropriate accuracy is reached
         else:
             self.goalReached=False
         return
@@ -353,61 +359,11 @@ class FieldPlanner(threading.Thread):
         Q3[3]=Q1[3] * Q2[3] - Q1[0] * Q2[0] - Q1[1] * Q2[1] - Q1[2] * Q2[2]
         return Q3
 
-    # -------------------------------------- PRINTERS --------------------------------------------------- #
-    def print_array_rep_leoni(self):
-        print("Repulsive points for Leoni:")
-        for i in range(0,self.dofLeoni):
-            print(self.arrayRepLeoni[i])
+    def stop_timer(self):
+        self.myPositioningTime.toc()
+        print("Temps écoulé pour le placement du patient: " + str(self.myPositioningTime))
         return
 
-    def print_array_att_leoni(self):
-        print("Attractive points for Leoni")
-        for i in range(0,self.dofLeoni):
-            print(self.arrayAttLeoni[i])
-        return
-
-    def print_array_jac_rep(self):
-        logging.info("Repulsive jacobian matrices")
-        for i in range(0, self.dofLeoni):
-            logging.info(str(self.arrayJacRep[i]))
-        return
-
-    def print_array_jac_att(self):
-        logging.info("Attractive jacobian matrices")
-        for i in range(0,self.dofLeoni):
-            logging.info(str(self.arrayJacAtt[i]))
-        return
-
-    def print_att_forces(self):
-        print("World attractive forces")
-        for i in range(0,self.dofLeoni):
-            print(str(self.arrayAttForces[i]))
-        return
-
-    def print_rep_forces(self):
-        print("World repulsive forces")
-        for i in range(0,self.dofLeoni):
-            print(str(self.arrayRepForces[i]))
-        return
-
-
-    def print_joint_torques(self):
-        logging.info("Joint torques to apply")
-        for i in range(0, self.dofLeoni):
-            logging.info(str(self.jointTorques[i]))
-        return
-
-    def print_joint_pos_deg(self):
-        logging.info("Joint Position in degrees")
-        for i in range(0, self.dofLeoni):
-            logging.info(str(self.jointPos[i]*180/3.1415))
-        return
-
-    def print_position_all_link(self,indexBody):
-        logging.info("Position de chacun des links")
-        for link in range(0, p.getNumJoints(self.world.ppsId)):
-            print(p.getLinkState(indexBody, link)[0])
-        return
     # ---------------------------  Création du C-space -------------------------------------#
 
     def get_rep_fields(self):
@@ -563,4 +519,59 @@ class FieldPlanner(threading.Thread):
             time.sleep(0.001)
             #self.print_joint_pos_deg()
 
+        return
+ # -------------------------------------- PRINTERS --------------------------------------------------- #
+    def print_array_rep_leoni(self):
+        print("Repulsive points for Leoni:")
+        for i in range(0,self.dofLeoni):
+            print(self.arrayRepLeoni[i])
+        return
+
+    def print_array_att_leoni(self):
+        print("Attractive points for Leoni")
+        for i in range(0,self.dofLeoni):
+            print(self.arrayAttLeoni[i])
+        return
+
+    def print_array_jac_rep(self):
+        logging.info("Repulsive jacobian matrices")
+        for i in range(0, self.dofLeoni):
+            logging.info(str(self.arrayJacRep[i]))
+        return
+
+    def print_array_jac_att(self):
+        logging.info("Attractive jacobian matrices")
+        for i in range(0,self.dofLeoni):
+            logging.info(str(self.arrayJacAtt[i]))
+        return
+
+    def print_att_forces(self):
+        print("World attractive forces")
+        for i in range(0,self.dofLeoni):
+            print(str(self.arrayAttForces[i]))
+        return
+
+    def print_rep_forces(self):
+        print("World repulsive forces")
+        for i in range(0,self.dofLeoni):
+            print(str(self.arrayRepForces[i]))
+        return
+
+
+    def print_joint_torques(self):
+        logging.info("Joint torques to apply")
+        for i in range(0, self.dofLeoni):
+            logging.info(str(self.jointTorques[i]))
+        return
+
+    def print_joint_pos_deg(self):
+        logging.info("Joint Position in degrees")
+        for i in range(0, self.dofLeoni):
+            logging.info(str(self.jointPos[i]*180/3.1415))
+        return
+
+    def print_position_all_link(self,indexBody):
+        logging.info("Position de chacun des links")
+        for link in range(0, p.getNumJoints(self.world.ppsId)):
+            print(p.getLinkState(indexBody, link)[0])
         return
